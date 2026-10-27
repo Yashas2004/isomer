@@ -19,6 +19,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = ["slow: long-running; deselect locally with -m 'not slow' (CI runs everything)"]
 
 [tool.ruff]
 line-length = 110

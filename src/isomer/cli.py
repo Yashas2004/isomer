@@ -73,6 +73,27 @@ def cmd_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench(args: argparse.Namespace) -> int:
+    from .bench.run import BenchConfig, BenchError, run
+
+    def csv(s: str) -> list[str]:
+        return list(dict.fromkeys(x.strip() for x in s.split(",") if x.strip()))
+
+    try:
+        budgets = [int(b) for b in csv(args.budgets)]
+    except ValueError:
+        print(f"error: --budgets must be comma-separated integers, got {args.budgets!r}", file=sys.stderr)
+        return 2
+    cfg = BenchConfig(data=args.data, split=args.split, methods=csv(args.methods), budgets=budgets,
+                      out=args.out, limit=args.limit, workers=args.workers, max_seconds=args.max_seconds,
+                      overwrite=args.overwrite, argv=tuple(args.argv))
+    try:
+        return run(cfg)
+    except BenchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="isomer")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -92,7 +113,20 @@ def main(argv: list[str] | None = None) -> int:
     dp.add_argument("--seed", type=int, default=0)
     dp.add_argument("--workers", type=int, default=0, help="0 = all cores but one")
     dp.set_defaults(fn=cmd_data)
+    bp = sub.add_parser("bench", help="run searchers on an IsoBench split, kernel-check, summarize")
+    bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v0")
+    bp.add_argument("--split", default="test_id")
+    bp.add_argument("--methods", required=True, help="comma-separated searcher names")
+    bp.add_argument("--budgets", required=True, help="comma-separated expansion budgets")
+    bp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
+    bp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
+    bp.add_argument("--max-seconds", type=float, default=None,
+                    help="per-run wall-clock cap (breaks the prefix property; cells above it are censored)")
+    bp.add_argument("--out", required=True, help="run directory, e.g. runs/NAME")
+    bp.add_argument("--overwrite", action="store_true")
+    bp.set_defaults(fn=cmd_bench)
     args = ap.parse_args(argv)
+    args.argv = list(sys.argv) if argv is None else ["isomer", *argv]
     return args.fn(args)
 
 

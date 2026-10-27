@@ -37,6 +37,7 @@ def test_trivial_problem():
     assert r.solved and r.proof.steps == ()
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", ["group", "lattice"])
 def test_bidirectional_matches_oracle(name):
     theory, sig = THEORIES[name]
