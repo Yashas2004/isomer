@@ -1,4 +1,4 @@
-"""Bidirectional breadth-first search: exact shortest proofs (within budget).
+"""Breadth-first search: exact shortest proofs (within budget).
 
 Two uses:
 1. **Labels.** The shortest-proof length ``dist`` is the honest difficulty of
@@ -15,34 +15,18 @@ not explored. Both limits are reported with every result.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
 
 from ..core.proof import Problem, Proof
 from ..core.rewrite import Rule, Step, invert_step, successors
 from ..core.term import Term, size
+from .common import SEARCHERS, Budget, Parents, SearchResult, out_of_time, size_cap, steps_from_parents
 
-
-@dataclass
-class SearchResult:
-    proof: Proof | None
-    expansions: int           # number of terms whose successors were generated
-    generated: int            # number of successor terms produced
-    seconds: float
-    exhausted: bool = False   # True if the reachable space was fully explored
-    lower_bound: int = 0      # proven: no proof shorter than this exists (within limits)
-    stats: dict = field(default_factory=dict)
-
-    @property
-    def solved(self) -> bool:
-        return self.proof is not None
-
-
-# parent map: term -> (previous term, step that turned previous into term)
-_Parents = dict[Term, tuple[Term, Step] | None]
+__all__ = ["SearchResult", "bidir_bfs", "bidirectional_bfs", "forward_bfs"]
 
 
 def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: int | None = None,
-                      max_depth: int = 64, inst_limit: int = 8) -> SearchResult:
+                      max_depth: int = 64, inst_limit: int = 8,
+                      max_seconds: float | None = None) -> SearchResult:
     """Grow BFS layers from both ends, always expanding the smaller frontier,
     until the two explored sets meet. Returns a shortest proof under the
     action-space limits above (layer-complete expansion guarantees this)."""
@@ -50,22 +34,25 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
     rules = problem.theory.rules()
     rule_list = list(rules.values())
     if max_size is None:
-        max_size = max(size(problem.lhs), size(problem.rhs)) + 6
+        max_size = size_cap(problem, 6)
 
     if problem.lhs == problem.rhs:
-        return SearchResult(Proof(problem, ()), 0, 0, time.perf_counter() - t0)
+        return SearchResult(Proof(problem, ()), 0, 0, time.perf_counter() - t0,
+                            stats={"nodes_stored": 1, "stop": "solved"})
 
-    fwd: _Parents = {problem.lhs: None}
-    bwd: _Parents = {problem.rhs: None}
+    fwd: Parents = {problem.lhs: None}
+    bwd: Parents = {problem.rhs: None}
     fwd_frontier, bwd_frontier = [problem.lhs], [problem.rhs]
     expansions = generated = 0
     fwd_depth = bwd_depth = 0   # number of fully completed layers on each side
 
-    def fail(exhausted: bool = False) -> SearchResult:
+    def fail(stop: str, exhausted: bool = False) -> SearchResult:
         # Every term within fwd_depth of lhs and bwd_depth of rhs has been seen
         # and the sets are disjoint, so dist > fwd_depth + bwd_depth.
         return SearchResult(None, expansions, generated, time.perf_counter() - t0,
-                            exhausted=exhausted, lower_bound=fwd_depth + bwd_depth + 1)
+                            exhausted=exhausted, lower_bound=fwd_depth + bwd_depth + 1,
+                            stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
+                                   "nodes_stored": len(fwd) + len(bwd), "stop": stop})
 
     while fwd_frontier and bwd_frontier and fwd_depth + bwd_depth < max_depth:
         forward = len(fwd_frontier) <= len(bwd_frontier)
@@ -74,7 +61,9 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
         meet: Term | None = None
         for t in frontier:
             if expansions >= max_expansions:
-                return fail()
+                return fail("budget")
+            if out_of_time(t0, max_seconds):
+                return fail("time")
             expansions += 1
             for step, u in successors(t, rule_list, inst_limit):
                 generated += 1
@@ -92,24 +81,20 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
             proof = Proof(problem, tuple(steps))
             return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
                                 lower_bound=len(steps),
-                                stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd)})
+                                stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
+                                       "nodes_stored": len(fwd) + len(bwd), "stop": "solved"})
         if forward:
             fwd_frontier, fwd_depth = next_frontier, fwd_depth + 1
         else:
             bwd_frontier, bwd_depth = next_frontier, bwd_depth + 1
 
-    return fail(exhausted=not (fwd_frontier and bwd_frontier))
+    exhausted = not (fwd_frontier and bwd_frontier)
+    return fail("exhausted" if exhausted else "budget", exhausted=exhausted)
 
 
-def _join(rules: dict[str, Rule], fwd: _Parents, bwd: _Parents, meet: Term) -> list[Step]:
-    # lhs ... -> meet: walk fwd parents back to lhs, then reverse.
-    head: list[Step] = []
-    t = meet
-    while (link := fwd[t]) is not None:
-        prev, step = link
-        head.append(step)
-        t = prev
-    head.reverse()
+def _join(rules: dict[str, Rule], fwd: Parents, bwd: Parents, meet: Term) -> list[Step]:
+    # lhs ... -> meet: follow fwd parents back to lhs.
+    head = steps_from_parents(fwd, meet)
     # meet -> ... rhs: each bwd link says "prev --step--> t" was explored from
     # the rhs side, so we traverse it backwards with the inverse step.
     tail: list[Step] = []
@@ -119,3 +104,56 @@ def _join(rules: dict[str, Rule], fwd: _Parents, bwd: _Parents, meet: Term) -> l
         tail.append(invert_step(rules[step.rule], prev, step))
         t = prev
     return head + tail
+
+
+def bidir_bfs(problem: Problem, budget: Budget) -> SearchResult:
+    """``bidirectional_bfs`` behind the shared ``Budget`` interface."""
+    return bidirectional_bfs(problem, max_expansions=budget.max_expansions,
+                             max_size=size_cap(problem, budget.max_size_slack),
+                             inst_limit=budget.inst_limit, max_seconds=budget.max_seconds)
+
+
+def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
+    """One-directional BFS from lhs. The goal test happens on generation (the
+    first time rhs is produced, its layer is minimal), so the proof is
+    shortest within the action space. Slower than bidirectional search, but it
+    is the textbook baseline and the direction a learned policy searches in."""
+    t0 = time.perf_counter()
+    rule_list = list(problem.theory.rules().values())
+    max_size = size_cap(problem, budget.max_size_slack)
+    parents: Parents = {problem.lhs: None}
+
+    def result(stop: str, proof: Proof | None = None, depth: int = 0) -> SearchResult:
+        lb = len(proof.steps) if proof else depth + 1
+        return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
+                            exhausted=stop == "exhausted", lower_bound=lb,
+                            stats={"nodes_stored": len(parents), "stop": stop})
+
+    expansions = generated = 0
+    if problem.lhs == problem.rhs:
+        return result("solved", Proof(problem, ()))
+
+    frontier = [problem.lhs]
+    depth = 0   # number of fully completed layers: every term within depth of lhs is seen
+    while frontier:
+        next_frontier: list[Term] = []
+        for t in frontier:
+            if expansions >= budget.max_expansions:
+                return result("budget", depth=depth)
+            if out_of_time(t0, budget.max_seconds):
+                return result("time", depth=depth)
+            expansions += 1
+            for step, u in successors(t, rule_list, budget.inst_limit):
+                generated += 1
+                if u in parents or size(u) > max_size:
+                    continue
+                parents[u] = (t, step)
+                if u == problem.rhs:
+                    return result("solved", Proof(problem, tuple(steps_from_parents(parents, u))))
+                next_frontier.append(u)
+        frontier, depth = next_frontier, depth + 1
+    return result("exhausted", depth=depth)
+
+
+SEARCHERS["bfs-fwd"] = forward_bfs
+SEARCHERS["bfs-bidir"] = bidir_bfs
