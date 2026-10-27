@@ -1,0 +1,114 @@
+{
+  "by_theory": {
+    "test_depth": {
+      "bool": 908,
+      "group": 810
+    },
+    "test_id": {
+      "bool": 121,
+      "group": 122
+    },
+    "test_theory": {
+      "lattice": 300,
+      "ring": 300
+    },
+    "train": {
+      "bool": 971,
+      "group": 1068
+    }
+  },
+  "config": {
+    "bfs_budget": 3000,
+    "heldout_theories": [
+      "lattice",
+      "ring"
+    ],
+    "max_term_size": 30,
+    "out": "data/isobench-v0",
+    "per_heldout_theory": 300,
+    "per_theory": 2000,
+    "seed": 0,
+    "term_depth": 4,
+    "test_id_fraction": 0.1,
+    "train_max_dist": 4,
+    "train_theories": [
+      "group",
+      "bool"
+    ],
+    "walk_lengths": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12
+    ]
+  },
+  "counts": {
+    "test_depth": 1718,
+    "test_id": 243,
+    "test_theory": 600,
+    "train": 2039
+  },
+  "dist_histogram": {
+    "test_depth": {
+      "5": 566,
+      "6": 517,
+      "7": 168,
+      "8": 54,
+      "None": 413
+    },
+    "test_id": {
+      "1": 11,
+      "2": 63,
+      "3": 79,
+      "4": 90
+    },
+    "test_theory": {
+      "1": 31,
+      "2": 111,
+      "3": 137,
+      "4": 115,
+      "5": 75,
+      "6": 62,
+      "7": 10,
+      "8": 3,
+      "None": 56
+    },
+    "train": {
+      "1": 76,
+      "2": 546,
+      "3": 677,
+      "4": 740
+    }
+  },
+  "format": "isobench/0",
+  "notes": [
+    "dist = exact shortest proof length in Isomer's action space (subterm instantiation pool of 8, term size <= max(|lhs|,|rhs|)+6); null when BFS budget ran out, then dist_lb is a proven lower bound.",
+    "walk_len is only an upper bound on proof length.",
+    "every stored proof was accepted by the trusted kernel at build time."
+  ],
+  "seconds": {
+    "bfs_max": 78.218,
+    "bfs_mean": 2.451,
+    "generate": 28.2,
+    "total": 810.4
+  },
+  "unlabelled_fraction": 0.102,
+  "walk_minus_dist": {
+    "-2": 1,
+    "0": 1653,
+    "1": 467,
+    "2": 749,
+    "3": 272,
+    "4": 352,
+    "5": 214,
+    "6": 224,
+    "7": 97,
+    "8": 69,
+    "9": 26,
+    "10": 7
+  }
+}
