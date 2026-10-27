@@ -4,7 +4,7 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 .ruff_cache/
-runs/
-data/
-checkpoints/
+/runs/
+/data/
+/checkpoints/
 *.pt
