@@ -15,10 +15,10 @@ trusted checker in :mod:`isomer.core.kernel` re-implements replay on its own.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Iterable, Iterator
 
-from .term import App, Position, Term, match, parse, positions, replace, substitute, subterm, variables
+from .term import Position, Term, match, parse, positions, replace, size, substitute, subterm, variables
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,7 +28,7 @@ class Equation:
     rhs: Term
 
     @staticmethod
-    def parse(name: str, src: str) -> "Equation":
+    def parse(name: str, src: str) -> Equation:
         left, sep, right = src.partition("=")
         if not sep:
             raise ValueError(f"equation {name!r} has no '='")
@@ -69,7 +69,7 @@ class Step:
         }
 
     @staticmethod
-    def from_json(d: dict) -> "Step":
+    def from_json(d: dict) -> Step:
         return Step(d["rule"], tuple(d["pos"]), tuple((v, parse(t)) for v, t in d["inst"]))
 
 
@@ -79,14 +79,31 @@ class Theory:
     equations: tuple[Equation, ...]
 
     def rules(self) -> dict[str, Rule]:
-        """Both orientations of every equation. A direction is dropped only if
-        its lhs is a bare variable (it would match everywhere)."""
+        """Both orientations of every equation, always. A rule whose lhs is a
+        bare variable (``?x -> (* e ?x)``) matches at every position; that is
+        a big branching factor but it is required for completeness and so that
+        every step has an inverse (bidirectional search depends on this)."""
         out: dict[str, Rule] = {}
         for eq in self.equations:
-            for name, l, r in ((eq.name, eq.lhs, eq.rhs), (eq.name + "~", eq.rhs, eq.lhs)):
-                if isinstance(l, App):
-                    out[name] = Rule(name, l, r)
+            out[eq.name] = Rule(eq.name, eq.lhs, eq.rhs)
+            out[inverse_name(eq.name)] = Rule(inverse_name(eq.name), eq.rhs, eq.lhs)
         return out
+
+
+def inverse_name(rule: str) -> str:
+    return rule[:-1] if rule.endswith("~") else rule + "~"
+
+
+def invert_step(rule: Rule, before: Term, step: Step) -> Step:
+    """Given that ``step`` (using ``rule``) rewrites ``before`` into some
+    ``after``, return the step that rewrites ``after`` back into ``before``.
+    The inverse rule's fresh variables are exactly the variables the forward
+    rule *consumed*; their values come from matching the forward lhs."""
+    s = match(rule.lhs, subterm(before, step.pos))
+    if s is None:
+        raise ValueError(f"{step} does not apply")
+    consumed = sorted(variables(rule.lhs) - variables(rule.rhs))
+    return Step(inverse_name(rule.name), step.pos, tuple((v, s[v]) for v in consumed))
 
 
 def apply_step(rule: Rule, t: Term, step: Step) -> Term | None:
@@ -105,42 +122,46 @@ def apply_step(rule: Rule, t: Term, step: Step) -> Term | None:
     return replace(t, step.pos, substitute(rule.rhs, s))
 
 
-def candidate_instantiations(t: Term, fresh: tuple[str, ...], limit: int = 8) -> Iterator[tuple[tuple[str, Term], ...]]:
-    """Heuristic pool for fresh variables: small distinct ground subterms of
-    the current term. Complete search would need *all* terms; this is the
-    classic subterm heuristic and is one of the things the neural policy
-    is meant to improve on."""
-    if not fresh:
-        yield ()
-        return
-    pool: list[Term] = []
+def instantiation_pool(t: Term, limit: int = 8) -> list[Term]:
+    """Heuristic pool for fresh variables: the ``limit`` smallest distinct
+    subterms of the current term. Complete search would need *all* terms;
+    this is the classic subterm heuristic, and choosing well from a larger
+    pool is one of the things the neural policy is meant to learn."""
     seen: set[Term] = set()
+    pool: list[Term] = []
     for p in positions(t):
         s = subterm(t, p)
         if s not in seen:
             seen.add(s)
             pool.append(s)
-    pool.sort(key=lambda u: (len(str(u)), str(u)))
-    pool = pool[:limit]
-    if len(fresh) == 1:
-        for u in pool:
-            yield ((fresh[0], u),)
-    else:  # keep the product small; theories rarely need >1 fresh var
-        for u in pool:
-            yield tuple((v, u) for v in fresh)
+    pool.sort(key=lambda u: (size(u), str(u)))
+    return pool[:limit]
+
+
+def candidate_instantiations(t: Term, fresh: tuple[str, ...], limit: int = 8,
+                             pool: list[Term] | None = None) -> Iterator[tuple[tuple[str, Term], ...]]:
+    if not fresh:
+        yield ()
+        return
+    if pool is None:
+        pool = instantiation_pool(t, limit)
+    for u in pool:  # theories rarely need >1 fresh var; keep the product small
+        yield tuple((v, u) for v in fresh)
 
 
 def successors(t: Term, rules: Iterable[Rule], inst_limit: int = 8) -> Iterator[tuple[Step, Term]]:
     """Every one-step rewrite of ``t`` (deterministic order)."""
-    rule_list = list(rules)
+    rule_list = [(r, r.fresh_vars) for r in rules]
+    pool: list[Term] | None = None
     for pos in positions(t):
         target = subterm(t, pos)
-        for rule in rule_list:
+        for rule, fresh in rule_list:
             s = match(rule.lhs, target)
             if s is None:
                 continue
-            for inst in candidate_instantiations(t, rule.fresh_vars, inst_limit):
-                step = Step(rule.name, pos, inst)
+            if fresh and pool is None:
+                pool = instantiation_pool(t, inst_limit)
+            for inst in candidate_instantiations(t, fresh, inst_limit, pool):
                 s2 = dict(s)
                 s2.update(inst)
-                yield step, replace(t, pos, substitute(rule.rhs, s2))
+                yield Step(rule.name, pos, inst), replace(t, pos, substitute(rule.rhs, s2))

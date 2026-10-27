@@ -1,8 +1,20 @@
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
-from isomer.core.term import (App, ParseError, Var, match, parse, positions, replace,
-                              size, substitute, subterm, variables)
+from isomer.core.term import (
+    App,
+    ParseError,
+    Var,
+    match,
+    parse,
+    positions,
+    replace,
+    size,
+    substitute,
+    subterm,
+    variables,
+)
 
 ATOMS = st.sampled_from(["e", "a", "b", "T", "F"])
 

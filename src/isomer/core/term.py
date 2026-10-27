@@ -18,8 +18,8 @@ Positions are tuples of argument indices from the root: ``()`` is the root,
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Iterator, Union
 
 Position = tuple[int, ...]
 
@@ -35,12 +35,15 @@ class Var:
 @dataclass(frozen=True, slots=True)
 class App:
     op: str
-    args: tuple["Term", ...] = ()
-    # Cached structural hash: terms are hashed constantly during search.
+    args: tuple[Term, ...] = ()
+    # Cached hash and size: both are needed constantly during search, and
+    # terms are immutable, so compute once at construction (O(arity)).
     _hash: int = field(default=0, init=False, repr=False, compare=False)
+    _size: int = field(default=1, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_hash", hash((self.op, self.args)))
+        object.__setattr__(self, "_size", 1 + sum(a._size if isinstance(a, App) else 1 for a in self.args))
 
     def __hash__(self) -> int:
         return self._hash
@@ -51,7 +54,7 @@ class App:
         return "(" + " ".join([self.op, *map(str, self.args)]) + ")"
 
 
-Term = Union[Var, App]
+Term = Var | App
 
 
 # --------------------------------------------------------------------------
@@ -115,9 +118,7 @@ def _parse(tokens: list[str], i: int) -> tuple[Term, int]:
 # --------------------------------------------------------------------------
 
 def size(t: Term) -> int:
-    if isinstance(t, Var):
-        return 1
-    return 1 + sum(size(a) for a in t.args)
+    return t._size if isinstance(t, App) else 1
 
 
 def depth(t: Term) -> int:

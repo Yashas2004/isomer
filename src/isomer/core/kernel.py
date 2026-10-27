@@ -77,10 +77,8 @@ def _put(t: Term, pos: tuple[int, ...], new: Term) -> Term:
 def _oriented(equations: list[tuple[str, Term, Term]]) -> dict[str, tuple[Term, Term]]:
     rules: dict[str, tuple[Term, Term]] = {}
     for name, l, r in equations:
-        if isinstance(l, App):
-            rules[name] = (l, r)
-        if isinstance(r, App):
-            rules[name + "~"] = (r, l)
+        rules[name] = (l, r)
+        rules[name + "~"] = (r, l)
     return rules
 
 

@@ -59,17 +59,39 @@ def cmd_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_data(args: argparse.Namespace) -> int:
+    from .data.build import BuildConfig, build
+
+    cfg = BuildConfig(out=args.out, per_theory=args.per_theory, per_heldout_theory=args.per_heldout,
+                      bfs_budget=args.bfs_budget, seed=args.seed)
+    if args.workers:
+        cfg.workers = args.workers
+    print(f"building {cfg.out} with {cfg.workers} worker processes ...")
+    sheet = build(cfg)
+    print(json.dumps({k: sheet[k] for k in ("counts", "unlabelled_fraction", "seconds")}, indent=2))
+    print(f"datasheet: {cfg.out}/datasheet.json")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="isomer")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("doctor", help="check Python/PyTorch/CUDA").set_defaults(fn=cmd_doctor)
     sub.add_parser("demo", help="prove a tiny group identity and check it").set_defaults(fn=cmd_demo)
     sp = sub.add_parser("sample", help="generate random-walk problems")
-    sp.add_argument("--theory", default="group", choices=["group", "bool"])
+    sp.add_argument("--theory", default="group", choices=["group", "bool", "lattice", "ring"])
     sp.add_argument("-n", type=int, default=5)
     sp.add_argument("-k", type=int, default=6)
     sp.add_argument("--seed", type=int, default=0)
     sp.set_defaults(fn=cmd_sample)
+    dp = sub.add_parser("data", help="build the IsoBench dataset")
+    dp.add_argument("--out", default="data/isobench-v0")
+    dp.add_argument("--per-theory", type=int, default=2000)
+    dp.add_argument("--per-heldout", type=int, default=300)
+    dp.add_argument("--bfs-budget", type=int, default=3000)
+    dp.add_argument("--seed", type=int, default=0)
+    dp.add_argument("--workers", type=int, default=0, help="0 = all cores but one")
+    dp.set_defaults(fn=cmd_data)
     args = ap.parse_args(argv)
     return args.fn(args)
 

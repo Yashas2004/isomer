@@ -17,7 +17,7 @@ class Problem:
     meta: dict = field(default_factory=dict, compare=False, hash=False)
 
     @staticmethod
-    def parse(theory: Theory, lhs: str, rhs: str, **meta) -> "Problem":
+    def parse(theory: Theory, lhs: str, rhs: str, **meta) -> Problem:
         return Problem(theory, parse(lhs), parse(rhs), dict(meta))
 
     def __str__(self) -> str:
