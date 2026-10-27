@@ -7,7 +7,6 @@ from isomer.cli import main
 from isomer.core.proof import Problem, Proof
 from isomer.core.rewrite import Step
 from isomer.core.theories import THEORIES
-from isomer.data.build import BuildConfig, build
 from isomer.search.common import SEARCHERS, Budget, SearchResult
 
 SPLIT = "train"
@@ -17,11 +16,8 @@ REQUIRED = {"id", "theory", "split", "dist", "dist_lb", "method", "max_budget", 
 
 
 @pytest.fixture(scope="module")
-def data(tmp_path_factory):
-    out = tmp_path_factory.mktemp("isobench")
-    build(BuildConfig(out=str(out), per_theory=10, per_heldout_theory=3, bfs_budget=300, workers=1),
-          progress=False)
-    return out
+def data(tiny_data):
+    return tiny_data
 
 
 def bench(data, out, methods="bfs-bidir,ucs", *extra):
@@ -102,7 +98,7 @@ def test_worker_pool_matches_in_process(data, run_dir, tmp_path):
 
 def _row(**kw):
     base = {"method": "m", "max_budget": 1000, "status": "ok", "solved": False, "expansions": 10,
-            "stop": "budget", "proof_len": None, "dist": None}
+            "stop": "budget", "proof_len": None, "dist": None, "nodes_stored": 5}
     base.update(kw)
     return base
 

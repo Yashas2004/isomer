@@ -182,6 +182,7 @@ def summarize(rows: list[dict], budgets: list[int]) -> list[dict]:
                 "method": m, "budget": b, "n": n, "solved": len(solved),
                 "rate": len(solved) / n if n else None, "ci_lo": lo, "ci_hi": hi,
                 "median_expansions": statistics.median(r["expansions"] for r in solved) if solved else None,
+                "median_nodes_stored": statistics.median(r["nodes_stored"] for r in solved) if solved else None,
                 "opt_gap": sum(gaps) / len(gaps) if gaps else None,
                 "censored": len(cells) - n,
             })

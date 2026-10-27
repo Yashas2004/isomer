@@ -12,6 +12,8 @@ dependencies = ["numpy>=1.26"]
 [project.optional-dependencies]
 # torch is installed separately (CUDA wheel) -- see README.
 dev = ["pytest>=8", "hypothesis>=6.100", "ruff>=0.6"]
+# Only `isomer report` needs these; the core package imports and tests without them.
+plots = ["matplotlib>=3.7"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

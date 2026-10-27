@@ -94,6 +94,17 @@ def cmd_bench(args: argparse.Namespace) -> int:
         return 2
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    from .bench.report import report
+    from .bench.run import BenchError
+
+    try:
+        return report(args.run, reference=args.reference)
+    except BenchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="isomer")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -125,6 +136,11 @@ def main(argv: list[str] | None = None) -> int:
     bp.add_argument("--out", required=True, help="run directory, e.g. runs/NAME")
     bp.add_argument("--overwrite", action="store_true")
     bp.set_defaults(fn=cmd_bench)
+    rp = sub.add_parser("report", help="write results.md and figures for a bench run (no re-running)")
+    rp.add_argument("run", help="run directory written by `isomer bench`, e.g. runs/NAME")
+    rp.add_argument("--reference", default=None,
+                    help="method for paired comparisons (default: bfs-fwd if it is in the run)")
+    rp.set_defaults(fn=cmd_report)
     args = ap.parse_args(argv)
     args.argv = list(sys.argv) if argv is None else ["isomer", *argv]
     return args.fn(args)
