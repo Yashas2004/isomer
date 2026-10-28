@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from . import kernel
-from .rewrite import Step, Theory, apply_step
+from .rewrite import Step, Theory, apply_step, problem_pool
 from .term import Term, parse
 
 
@@ -22,6 +22,11 @@ class Problem:
 
     def __str__(self) -> str:
         return f"[{self.theory.name}] {self.lhs} = {self.rhs}"
+
+    def pool(self, max_size: int = 3) -> tuple[Term, ...]:
+        """This problem's instantiation pool (ADR-003): compute once per search."""
+        sig = self.theory.signature
+        return problem_pool(sig.constants, sig.skolems, self.lhs, self.rhs, max_size)
 
 
 @dataclass(frozen=True)

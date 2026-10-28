@@ -2,7 +2,7 @@
 
 Output layout (one directory per benchmark version):
 
-    data/isobench-v0/
+    data/isobench-v1/
         train.jsonl         group+bool, dist <= TRAIN_MAX_DIST (or walk-labelled)
         test_id.jsonl       same distribution as train, held out by hash
         test_depth.jsonl    group+bool, dist > TRAIN_MAX_DIST  (depth extrapolation)
@@ -32,12 +32,12 @@ from ..core.proof import Problem, Proof
 from ..core.theories import THEORIES
 from ..search.bfs import bidirectional_bfs
 
-FORMAT_VERSION = "isobench/0"
+FORMAT_VERSION = "isobench/1"   # v1: symmetric problem-level action space (ADR-003)
 
 
 @dataclass
 class BuildConfig:
-    out: str = "data/isobench-v0"
+    out: str = "data/isobench-v1"
     train_theories: tuple[str, ...] = ("group", "bool")
     heldout_theories: tuple[str, ...] = ("lattice", "ring")
     per_theory: int = 2000          # unique problems generated per training theory
@@ -46,6 +46,7 @@ class BuildConfig:
     term_depth: int = 4
     max_term_size: int = 30
     bfs_budget: int = 3000          # expansions per problem for labelling
+    pool_max_size: int = 3          # problem pool: subterms of lhs/rhs up to this size (ADR-003)
     train_max_dist: int = 4         # dist above this goes to test_depth
     test_id_fraction: float = 0.1
     seed: int = 0
@@ -67,7 +68,8 @@ def _generate(theory_name: str, n: int, cfg: BuildConfig, seed: int) -> list[Pro
     while len(out) < n and attempts < n * 50:
         attempts += 1
         k = rng.choice(cfg.walk_lengths)
-        p = random_walk(theory, random_term(sig, cfg.term_depth, rng), k, rng, max_size=cfg.max_term_size)
+        p = random_walk(theory, random_term(sig, cfg.term_depth, rng), k, rng, max_size=cfg.max_term_size,
+                        pool_max_size=cfg.pool_max_size)
         if not p.steps or p.problem.lhs == p.problem.rhs:
             continue
         pid = problem_id(theory_name, str(p.problem.lhs), str(p.problem.rhs))
@@ -78,16 +80,16 @@ def _generate(theory_name: str, n: int, cfg: BuildConfig, seed: int) -> list[Pro
     return out
 
 
-def _label(args: tuple[str, str, str, list[dict], int]) -> dict:
+def _label(args: tuple[str, str, str, list[dict], int, int]) -> dict:
     """Runs in a worker process. Returns one JSON-ready record."""
-    theory_name, lhs, rhs, walk_steps, budget = args
+    theory_name, lhs, rhs, walk_steps, budget, pool_max_size = args
     from ..core.rewrite import Step  # local import keeps worker start cheap
 
     theory, _ = THEORIES[theory_name]
     problem = Problem.parse(theory, lhs, rhs)
     walk = Proof(problem, tuple(Step.from_json(s) for s in walk_steps))
     assert walk.verify(), "generator produced a proof the kernel rejects"
-    res = bidirectional_bfs(problem, max_expansions=budget)
+    res = bidirectional_bfs(problem, max_expansions=budget, pool_max_size=pool_max_size)
     rec = {
         "id": problem_id(theory_name, lhs, rhs),
         "theory": theory_name,
@@ -121,13 +123,13 @@ def _split(rec: dict, cfg: BuildConfig) -> str:
 
 def build(cfg: BuildConfig, progress: bool = True) -> dict:
     t0 = time.perf_counter()
-    jobs: list[tuple[str, str, str, list[dict], int]] = []
+    jobs: list[tuple[str, str, str, list[dict], int, int]] = []
     plan = [(t, cfg.per_theory) for t in cfg.train_theories] + \
            [(t, cfg.per_heldout_theory) for t in cfg.heldout_theories]
     for i, (name, n) in enumerate(plan):
         for p in _generate(name, n, cfg, seed=cfg.seed * 1000 + i):
             jobs.append((name, str(p.problem.lhs), str(p.problem.rhs),
-                         [s.to_json() for s in p.steps], cfg.bfs_budget))
+                         [s.to_json() for s in p.steps], cfg.bfs_budget, cfg.pool_max_size))
     gen_seconds = time.perf_counter() - t0
 
     records: list[dict] = []
@@ -163,8 +165,11 @@ def build(cfg: BuildConfig, progress: bool = True) -> dict:
                     "bfs_mean": round(sum(label_seconds) / max(1, len(label_seconds)), 3),
                     "bfs_max": round(max(label_seconds, default=0.0), 3)},
         "notes": [
-            ("dist = exact shortest proof length in Isomer's action space (subterm instantiation pool of 8, "
-             "term size <= max(|lhs|,|rhs|)+6); null when BFS budget ran out, then dist_lb is a proven lower bound."),
+            ("dist = exact shortest proof length in Isomer's action space (ADR-003): fresh and consumed "
+             "variable values come from the problem pool (theory constants, skolems occurring in lhs/rhs, "
+             f"subterms of lhs/rhs of size <= pool_max_size = {cfg.pool_max_size}); term size <= max(|lhs|,|rhs|)+6. The action "
+             "space is symmetric, so bidirectional BFS distances are exact. null when the BFS budget ran out; "
+             "then dist_lb is a proven lower bound."),
             "walk_len is only an upper bound on proof length.",
             "every stored proof was accepted by the trusted kernel at build time.",
         ],

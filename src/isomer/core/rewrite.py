@@ -9,16 +9,25 @@ for ``?y`` chosen by the prover; the choice is recorded in the proof step so
 that the kernel can replay it. This is what makes equational proofs hard:
 the action space is infinite, and the search must invent the right term.
 
+**Action space (ADR-003).** Each problem has a finite *pool* of values
+(``problem_pool``): theory constants, the skolems it mentions, and the small subterms of
+its two sides. A step is legal iff every value bound to a *one-sided*
+variable is in the pool. One-sided means *introduced* (in the rule's rhs only)
+or *consumed* (in its lhs only). Restricting both directions makes the action
+space symmetric: every legal step has a legal inverse under the same pool, so
+bidirectional search computes exact shortest distances.
+
 This module is *untrusted*: it is used by search and data generation. The
 trusted checker in :mod:`isomer.core.kernel` re-implements replay on its own.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+import itertools
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass, field
 
-from .term import Position, Term, match, parse, positions, replace, size, substitute, subterm, variables
+from .term import App, Position, Term, match, parse, positions, replace, size, substitute, subterm, variables
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,9 +83,20 @@ class Step:
 
 
 @dataclass(frozen=True)
+class Signature:
+    ops: dict[str, int] = field(hash=False)  # non-constant operators and their arities
+    constants: tuple[str, ...]   # theory constants (e.g. the identity e)
+    skolems: tuple[str, ...]     # free constants allowed in problems
+
+
+@dataclass(frozen=True)
 class Theory:
+    """Axioms plus the signature problems are written in. The signature lives
+    here (not in a name-keyed registry) so that a ``Problem`` alone determines
+    its action space: the pool needs the constants and skolems (ADR-003)."""
     name: str
     equations: tuple[Equation, ...]
+    signature: Signature
 
     def rules(self) -> dict[str, Rule]:
         """Both orientations of every equation, always. A rule whose lhs is a
@@ -98,7 +118,11 @@ def invert_step(rule: Rule, before: Term, step: Step) -> Step:
     """Given that ``step`` (using ``rule``) rewrites ``before`` into some
     ``after``, return the step that rewrites ``after`` back into ``before``.
     The inverse rule's fresh variables are exactly the variables the forward
-    rule *consumed*; their values come from matching the forward lhs."""
+    rule *consumed*; their values come from matching the forward lhs.
+
+    If the forward step is legal under a pool, so is the inverse: it introduces
+    exactly the values the forward step consumed, and consumes exactly the
+    values it introduced (ADR-003)."""
     s = match(rule.lhs, subterm(before, step.pos))
     if s is None:
         raise ValueError(f"{step} does not apply")
@@ -122,46 +146,40 @@ def apply_step(rule: Rule, t: Term, step: Step) -> Term | None:
     return replace(t, step.pos, substitute(rule.rhs, s))
 
 
-def instantiation_pool(t: Term, limit: int = 8) -> list[Term]:
-    """Heuristic pool for fresh variables: the ``limit`` smallest distinct
-    subterms of the current term. Complete search would need *all* terms;
-    this is the classic subterm heuristic, and choosing well from a larger
-    pool is one of the things the neural policy is meant to learn."""
-    seen: set[Term] = set()
-    pool: list[Term] = []
-    for p in positions(t):
-        s = subterm(t, p)
-        if s not in seen:
-            seen.add(s)
-            pool.append(s)
-    pool.sort(key=lambda u: (size(u), str(u)))
-    return pool[:limit]
+def problem_pool(theory_constants: Iterable[str], skolems: Iterable[str], lhs: Term, rhs: Term,
+                 max_size: int = 3) -> tuple[Term, ...]:
+    """The values one-sided variables may take in this problem: the theory
+    constants, the skolems that *occur* in lhs or rhs, and every distinct
+    subterm of lhs or rhs with size <= ``max_size``. Sorted by (size, str), so
+    it is deterministic. It depends only on the problem, never on the current
+    term, which is what makes the action space symmetric.
+
+    Leaving out unmentioned skolems is lossless (ADR-003): skolems carry no
+    axioms, so any proof that uses an unmentioned one can rename it to a
+    mentioned atom, giving a proof of the same length."""
+    subterms = {subterm(side, p) for side in (lhs, rhs) for p in positions(side)}
+    pool: set[Term] = {App(c) for c in theory_constants}
+    pool |= {App(s) for s in skolems if App(s) in subterms}
+    pool |= {s for s in subterms if size(s) <= max_size}
+    return tuple(sorted(pool, key=lambda u: (size(u), str(u))))
 
 
-def candidate_instantiations(t: Term, fresh: tuple[str, ...], limit: int = 8,
-                             pool: list[Term] | None = None) -> Iterator[tuple[tuple[str, Term], ...]]:
-    if not fresh:
-        yield ()
-        return
-    if pool is None:
-        pool = instantiation_pool(t, limit)
-    for u in pool:  # theories rarely need >1 fresh var; keep the product small
-        yield tuple((v, u) for v in fresh)
+def successors(t: Term, rules: Iterable[Rule], pool: Sequence[Term]) -> Iterator[tuple[Step, Term]]:
+    """Every legal one-step rewrite of ``t`` (deterministic order).
 
-
-def successors(t: Term, rules: Iterable[Rule], inst_limit: int = 8) -> Iterator[tuple[Step, Term]]:
-    """Every one-step rewrite of ``t`` (deterministic order)."""
-    rule_list = [(r, r.fresh_vars) for r in rules]
-    pool: list[Term] | None = None
+    Introduced variables range over the whole pool (the full product when a
+    rule introduces several). Steps whose consumed variables are bound
+    outside the pool are skipped: they would have no legal inverse."""
+    allowed = frozenset(pool)
+    rule_list = [(r, r.fresh_vars, tuple(sorted(variables(r.lhs) - variables(r.rhs)))) for r in rules]
     for pos in positions(t):
         target = subterm(t, pos)
-        for rule, fresh in rule_list:
+        for rule, fresh, consumed in rule_list:
             s = match(rule.lhs, target)
-            if s is None:
+            if s is None or any(s[v] not in allowed for v in consumed):
                 continue
-            if fresh and pool is None:
-                pool = instantiation_pool(t, inst_limit)
-            for inst in candidate_instantiations(t, fresh, inst_limit, pool):
+            for values in itertools.product(pool, repeat=len(fresh)):
+                inst = tuple(zip(fresh, values))
                 s2 = dict(s)
                 s2.update(inst)
                 yield Step(rule.name, pos, inst), replace(t, pos, substitute(rule.rhs, s2))

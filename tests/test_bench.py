@@ -7,6 +7,7 @@ from isomer.cli import main
 from isomer.core.proof import Problem, Proof
 from isomer.core.rewrite import Step
 from isomer.core.theories import THEORIES
+from isomer.data.build import FORMAT_VERSION
 from isomer.search.common import SEARCHERS, Budget, SearchResult
 
 SPLIT = "train"
@@ -60,7 +61,7 @@ def test_run_writes_rows_and_config(data, run_dir):
     for key in ("argv", "git_commit", "git_dirty", "python", "platform", "cpu_count", "timestamp_utc",
                 "budget", "dataset_format"):
         assert key in cfg
-    assert cfg["dataset_format"] == "isobench/0" and cfg["budget"]["max_expansions"] == 300
+    assert cfg["dataset_format"] == FORMAT_VERSION and cfg["budget"]["max_expansions"] == 300
     # Re-verify logged proofs from scratch: nothing from the runner is trusted.
     solved = [r for r in rows if r["solved"]]
     assert solved

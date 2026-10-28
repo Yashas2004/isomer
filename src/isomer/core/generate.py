@@ -12,7 +12,7 @@ import math
 import random
 
 from .proof import Problem, Proof
-from .rewrite import Theory, successors
+from .rewrite import Theory, problem_pool, successors
 from .term import App, Term, size
 from .theories import Signature
 
@@ -26,11 +26,17 @@ def random_term(sig: Signature, max_depth: int, rng: random.Random) -> Term:
 
 
 def random_walk(theory: Theory, start: Term, k: int, rng: random.Random,
-                max_size: int = 40, growth_temp: float = 1.5) -> Proof:
+                max_size: int = 40, growth_temp: float = 1.5, pool_max_size: int = 3) -> Proof:
+    """The pool comes from the START term only (its constants, the skolems it
+    mentions, its small subterms). The resulting problem's lhs is ``start``,
+    so this pool is a subset of the problem's own pool, and every walk step is
+    legal in the problem's action space (ADR-003)."""
     rules = theory.rules().values()
+    sig = theory.signature
+    pool = problem_pool(sig.constants, sig.skolems, start, start, pool_max_size)
     cur, seen, steps = start, {start}, []
     for _ in range(k):
-        options = [(s, t) for s, t in successors(cur, rules) if t not in seen and size(t) <= max_size]
+        options = [(s, t) for s, t in successors(cur, rules, pool) if t not in seen and size(t) <= max_size]
         if not options:
             break
         # Size-aware sampling: growing rewrites (e.g. e -> (* (inv x) x)) are

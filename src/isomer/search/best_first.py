@@ -34,6 +34,7 @@ from .heuristics import Heuristic, size_diff, symbol_bag, zero
 def best_first(problem: Problem, budget: Budget, h: Heuristic = zero, w: float = 1.0) -> SearchResult:
     t0 = time.perf_counter()
     rule_list = list(problem.theory.rules().values())
+    pool = problem.pool(budget.pool_max_size)
     max_size = size_cap(problem, budget.max_size_slack)
     goal = problem.rhs
     parents: Parents = {problem.lhs: None}
@@ -57,7 +58,7 @@ def best_first(problem: Problem, budget: Budget, h: Heuristic = zero, w: float =
             return result("time")
         _, _, g, t = heapq.heappop(heap)
         expansions += 1
-        for step, u in successors(t, rule_list, budget.inst_limit):
+        for step, u in successors(t, rule_list, pool):
             generated += 1
             if u in parents or size(u) > max_size:
                 continue

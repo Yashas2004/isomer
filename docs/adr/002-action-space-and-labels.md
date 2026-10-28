@@ -1,6 +1,6 @@
 # ADR 002 — Action space, inverse rules, and difficulty labels
 
-**Status:** accepted · **Date:** 2026-10-27
+**Status:** accepted; decision 4 superseded by ADR-003 · **Date:** 2026-10-27
 
 ## Context
 Phase 1b needs an honest difficulty label for each problem. Random-walk

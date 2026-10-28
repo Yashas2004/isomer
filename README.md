@@ -30,7 +30,7 @@ python -m isomer demo
 python -m isomer sample --theory group -n 5 -k 6
 
 # 5. Build IsoBench v0 (uses all CPU cores but one; ~10-30 min on a laptop)
-python -m isomer data --out data/isobench-v0
+python -m isomer data --out data/isobench-v1
 ```
 
 In VS Code: install the *Python* extension, `Ctrl+Shift+P → Python: Select

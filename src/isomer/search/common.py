@@ -50,13 +50,13 @@ class SearchResult:
 
 @dataclass(frozen=True)
 class Budget:
-    """Limits shared by all searchers. ``max_size_slack`` and ``inst_limit``
-    define the action space (ADR 002 §4); the other two cap compute.
+    """Limits shared by all searchers. ``max_size_slack`` and ``pool_max_size``
+    define the action space (ADR-002, ADR-003); the other two cap compute.
     Keep ``max_seconds=None`` for reproducible runs (see module docstring)."""
     max_expansions: int = 1000
     max_seconds: float | None = None
     max_size_slack: int = 6
-    inst_limit: int = 8
+    pool_max_size: int = 3
 
 
 class Searcher(Protocol):

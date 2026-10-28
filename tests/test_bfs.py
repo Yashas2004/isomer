@@ -13,12 +13,13 @@ from isomer.search.bfs import bidirectional_bfs
 def oracle_dist(problem, max_size, limit=6):
     """Plain one-directional BFS: slow but obviously correct."""
     rules = list(problem.theory.rules().values())
+    pool = problem.pool()
     seen, q = {problem.lhs: 0}, deque([problem.lhs])
     while q:
         t = q.popleft()
         if seen[t] >= limit:
             continue
-        for _, u in successors(t, rules):
+        for _, u in successors(t, rules, pool):
             if u not in seen and size(u) <= max_size:
                 seen[u] = seen[t] + 1
                 if u == problem.rhs:
@@ -38,7 +39,7 @@ def test_trivial_problem():
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("name", ["group", "lattice"])
+@pytest.mark.parametrize("name", ["group", "lattice", "bool"])
 def test_bidirectional_matches_oracle(name):
     theory, sig = THEORIES[name]
     for p in sample_problems(theory, sig, n=12, k=3, seed=5, term_depth=3):

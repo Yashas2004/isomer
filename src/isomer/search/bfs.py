@@ -6,10 +6,11 @@ Two uses:
 2. **Baseline.** Uninformed search that every learned method must beat at an
    equal expansion budget.
 
-"Shortest" is relative to Isomer's action space: fresh variables are
-instantiated from the current term's subterms (see
-``rewrite.candidate_instantiations``) and terms larger than ``max_size`` are
-not explored. Both limits are reported with every result.
+"Shortest" is relative to Isomer's action space (ADR-003): values of
+introduced and consumed variables come from the problem's pool
+(``Problem.pool``), and terms larger than ``max_size`` are not explored. The
+pool makes the action space symmetric, so the backward half replays exactly
+the forward steps and bidirectional distances are exact.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ __all__ = ["SearchResult", "bidir_bfs", "bidirectional_bfs", "forward_bfs"]
 
 
 def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: int | None = None,
-                      max_depth: int = 64, inst_limit: int = 8,
+                      max_depth: int = 64, pool_max_size: int = 3,
                       max_seconds: float | None = None) -> SearchResult:
     """Grow BFS layers from both ends, always expanding the smaller frontier,
     until the two explored sets meet. Returns a shortest proof under the
@@ -33,6 +34,7 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
     t0 = time.perf_counter()
     rules = problem.theory.rules()
     rule_list = list(rules.values())
+    pool = problem.pool(pool_max_size)
     if max_size is None:
         max_size = size_cap(problem, 6)
 
@@ -65,7 +67,7 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
             if out_of_time(t0, max_seconds):
                 return fail("time")
             expansions += 1
-            for step, u in successors(t, rule_list, inst_limit):
+            for step, u in successors(t, rule_list, pool):
                 generated += 1
                 if u in seen or size(u) > max_size:
                     continue
@@ -110,7 +112,7 @@ def bidir_bfs(problem: Problem, budget: Budget) -> SearchResult:
     """``bidirectional_bfs`` behind the shared ``Budget`` interface."""
     return bidirectional_bfs(problem, max_expansions=budget.max_expansions,
                              max_size=size_cap(problem, budget.max_size_slack),
-                             inst_limit=budget.inst_limit, max_seconds=budget.max_seconds)
+                             pool_max_size=budget.pool_max_size, max_seconds=budget.max_seconds)
 
 
 def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
@@ -120,6 +122,7 @@ def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
     is the textbook baseline and the direction a learned policy searches in."""
     t0 = time.perf_counter()
     rule_list = list(problem.theory.rules().values())
+    pool = problem.pool(budget.pool_max_size)
     max_size = size_cap(problem, budget.max_size_slack)
     parents: Parents = {problem.lhs: None}
 
@@ -143,7 +146,7 @@ def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
             if out_of_time(t0, budget.max_seconds):
                 return result("time", depth=depth)
             expansions += 1
-            for step, u in successors(t, rule_list, budget.inst_limit):
+            for step, u in successors(t, rule_list, pool):
                 generated += 1
                 if u in parents or size(u) > max_size:
                     continue
