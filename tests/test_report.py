@@ -10,6 +10,8 @@ from isomer.bench.report import (
     mcnemar_exact,
     method_colors,
     paired,
+    paired_table,
+    render_markdown,
     report,
 )
 from isomer.cli import main
@@ -64,6 +66,22 @@ def test_identical_methods_and_paired():
     assert paired(rows, "z", "x", 100) == (1, 0)
     assert paired(rows, "x", "z", 100) == (0, 1)
     assert paired(rows, "z", "x", 5) == (0, 0)  # expansions 10 > 5: nobody solves
+
+
+def test_paired_table_skips_methods_identical_to_reference():
+    rows = []
+    for m in ("ref", "twin"):
+        rows += [row(m, "p1", True, proof_len=2), row(m, "p2", False), row(m, "p3", False)]
+    rows += [row("z", "p1", True, proof_len=2), row("z", "p2", True, proof_len=3), row("z", "p3", True, proof_len=2)]
+    tests, untested = paired_table(rows, "ref", [100])
+    assert untested == ["twin"]
+    assert [t["method"] for t in tests] == ["z"]
+    # The Holm family is the single remaining test, so no adjustment happens.
+    assert tests[0]["p_holm"] == tests[0]["p"] == mcnemar_exact(2, 0)
+    md = render_markdown(rows, {"budgets": [100], "split": "s"}, "ref")
+    paired_section = md.split("## Paired comparison")[1].split("## Per theory")[0]
+    assert "`twin`" not in paired_section.split("Not tested")[0]
+    assert "Not tested (identical to reference on every problem): `twin`" in paired_section
 
 
 def test_method_colors_stable():

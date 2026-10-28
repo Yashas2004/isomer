@@ -28,7 +28,7 @@ import math
 from collections import defaultdict
 from pathlib import Path
 
-from .run import BenchError, cell, summarize
+from .run import BenchError, cell, summarize, wilson
 
 DEFAULT_REFERENCE = "bfs-fwd"
 
@@ -121,6 +121,24 @@ def paired(rows: list[dict], method: str, reference: str, b: int) -> tuple[int, 
     return a, c
 
 
+def paired_table(rows: list[dict], reference: str, budgets: list[int]) -> tuple[list[dict], list[str]]:
+    """McNemar tests of every method against ``reference`` at every budget,
+    Holm-adjusted as one family. Methods identical to the reference on every
+    problem are left out: their p = 1 is known in advance, and including them
+    would only inflate the Holm family. Returns (tests, untested methods)."""
+    same = next((g for g in identical_methods(rows) if reference in g), [reference])
+    untested = [m for m in same if m != reference]
+    others = [m for m in _methods(rows) if m not in same]
+    tests = []
+    for m in others:
+        for b in sorted(budgets):
+            a, c = paired(rows, m, reference, b)
+            tests.append({"method": m, "budget": b, "a": a, "b": c, "p": mcnemar_exact(a, c)})
+    for t, q in zip(tests, holm([t["p"] for t in tests])):
+        t["p_holm"] = q
+    return tests, untested
+
+
 def method_colors(methods: list[str]) -> dict[str, str]:
     """Fixed colour per method (by sorted name) so every figure agrees."""
     return {m: TAB10[k % len(TAB10)] for k, m in enumerate(sorted(set(methods)))}
@@ -199,17 +217,17 @@ def render_markdown(rows: list[dict], config: dict, reference: str, reference_no
     out += _table(["method", "fair gap"], [[f"`{m}`", _f(gaps[m])] for m in methods])
 
     # Paired comparison ------------------------------------------------------
-    others = [m for m in methods if m != reference]
-    pairs = [(m, b, *paired(rows, m, reference, b)) for m in others for b in budgets]
-    pvals = [mcnemar_exact(a, c) for _, _, a, c in pairs]
-    adj = holm(pvals)
+    tests, untested = paired_table(rows, reference, budgets)
     out += ["", f"## Paired comparison vs `{reference}`", "",
             (f"a = solved by the method but not `{reference}`; b = the reverse. Exact two-sided "
             "McNemar test; Holm-Bonferroni adjusted across all rows. * = adjusted p < 0.05."), ""]
-    body = [[f"`{m}`", str(b), str(a), str(c), f"{p:.3g}", f"{q:.3g}", "*" if q < 0.05 else ""]
-            for (m, b, a, c), p, q in zip(pairs, pvals, adj)]
+    body = [[f"`{t['method']}`", str(t["budget"]), str(t["a"]), str(t["b"]), f"{t['p']:.3g}",
+             f"{t['p_holm']:.3g}", "*" if t["p_holm"] < 0.05 else ""] for t in tests]
     out += _table(["method", "budget", "a", "b", "p", "p (Holm)", "sig"], body, "lrrrrrl") if body \
         else ["(no other methods)"]
+    if untested:
+        out += ["", "Not tested (identical to reference on every problem): "
+                + ", ".join(f"`{m}`" for m in untested)]
 
     # Per theory -------------------------------------------------------------
     theories = sorted({r["theory"] for r in rows})
@@ -278,13 +296,21 @@ def plot_all(rows: list[dict], config: dict, out_dir: Path) -> list[Path]:
     buckets: list[int | None] = [*dists, *([None] if any(r["dist"] is None for r in rows) else [])]
     counts = [len({r["id"] for r in rows if r["dist"] == d}) for d in buckets]
     fig, ax = plt.subplots(figsize=(7, 4))
-    for m in methods:
-        ys = []
+    for k, m in enumerate(methods):
+        ys, lo, hi = [], [], []
         for d in buckets:
             cells = [cell(r, big) for r in rows if r["method"] == m and r["dist"] == d]
             cells = [c for c in cells if c != "censored"]
-            ys.append(sum(c == "solved" for c in cells) / len(cells) if cells else float("nan"))
-        ax.plot(range(len(buckets)), ys, marker="o", **style[m])
+            solved = sum(c == "solved" for c in cells)
+            y = solved / len(cells) if cells else float("nan")
+            ci_lo, ci_hi = wilson(solved, len(cells))
+            ys.append(y)
+            lo.append(y - ci_lo if cells else float("nan"))
+            hi.append(ci_hi - y if cells else float("nan"))
+        # Offset each method slightly so the 95% Wilson bars don't overlap.
+        dx = (k - (len(methods) - 1) / 2) * 0.08
+        ax.errorbar([i + dx for i in range(len(buckets))], ys, yerr=[lo, hi], marker="o",
+                    markersize=4, capsize=2.5, elinewidth=1, **style[m])
     ax.set_xticks(range(len(buckets)),
                   [f"{'unk' if d is None else d}\n(n={n})" for d, n in zip(buckets, counts)])
     ax.set_xlabel("true shortest proof length (steps)")
