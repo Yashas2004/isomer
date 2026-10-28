@@ -1,0 +1,50 @@
+{
+  "argv": [
+    "C:\\Users\\Yashas\\isomer\\src\\isomer\\__main__.py",
+    "bench",
+    "--data",
+    "data/isobench-v0",
+    "--split",
+    "test_id",
+    "--methods",
+    "bfs-bidir,bfs-fwd,bestfirst-size_diff-w1,bestfirst-size_diff-w3,bestfirst-symbol_bag-w1,bestfirst-symbol_bag-w3",
+    "--budgets",
+    "100,300,1000,3000",
+    "--workers",
+    "10",
+    "--out",
+    "runs/E1-test_id"
+  ],
+  "budget": {
+    "inst_limit": 8,
+    "max_expansions": 3000,
+    "max_seconds": null,
+    "max_size_slack": 6
+  },
+  "budgets": [
+    100,
+    300,
+    1000,
+    3000
+  ],
+  "cpu_count": 16,
+  "data": "data/isobench-v0",
+  "dataset_format": "isobench/0",
+  "git_commit": "3266f433a36e9de3689bd987f0378b6b96744ded",
+  "git_dirty": false,
+  "limit": null,
+  "methods": [
+    "bfs-bidir",
+    "bfs-fwd",
+    "bestfirst-size_diff-w1",
+    "bestfirst-size_diff-w3",
+    "bestfirst-symbol_bag-w1",
+    "bestfirst-symbol_bag-w3"
+  ],
+  "n_problems": 243,
+  "platform": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.11",
+  "split": "test_id",
+  "timestamp_utc": "2026-10-28T10:33:27+00:00",
+  "workers": 10
+}
