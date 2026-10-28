@@ -305,8 +305,9 @@ def plot_all(rows: list[dict], config: dict, out_dir: Path) -> list[Path]:
             y = solved / len(cells) if cells else float("nan")
             ci_lo, ci_hi = wilson(solved, len(cells))
             ys.append(y)
-            lo.append(y - ci_lo if cells else float("nan"))
-            hi.append(ci_hi - y if cells else float("nan"))
+            # Clamp: matplotlib rejects negative yerr, even -1e-17 from rounding.
+            lo.append(max(0.0, y - ci_lo) if cells else float("nan"))
+            hi.append(max(0.0, ci_hi - y) if cells else float("nan"))
         # Offset each method slightly so the 95% Wilson bars don't overlap.
         dx = (k - (len(methods) - 1) / 2) * 0.08
         ax.errorbar([i + dx for i in range(len(buckets))], ys, yerr=[lo, hi], marker="o",

@@ -125,6 +125,15 @@ def test_wilson():
     assert wilson(0, 0) == (0.0, 1.0)
 
 
+def test_wilson_contains_estimate_exhaustively():
+    # Regression: rounding gave lo ~ 5.5e-17 at k=0, i.e. a negative error bar.
+    for n in range(1, 301):
+        for k in range(n + 1):
+            lo, hi = wilson(k, n)
+            assert 0.0 <= lo <= k / n <= hi <= 1.0, (k, n, lo, hi)
+        assert wilson(0, n)[0] == 0.0 and wilson(n, n)[1] == 1.0
+
+
 def test_unsound_proof_is_caught(data, tmp_path, monkeypatch, capsys):
     rec = records(data)[0]
     row = evaluate(rec, SPLIT, "fake", 10, _unsound_searcher(_problem(rec), Budget()))
