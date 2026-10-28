@@ -1,0 +1,115 @@
+{
+  "by_theory": {
+    "test_depth": {
+      "bool": 908,
+      "group": 803
+    },
+    "test_id": {
+      "bool": 115,
+      "group": 121
+    },
+    "test_theory": {
+      "lattice": 300,
+      "ring": 300
+    },
+    "train": {
+      "bool": 977,
+      "group": 1076
+    }
+  },
+  "config": {
+    "bfs_budget": 3000,
+    "heldout_theories": [
+      "lattice",
+      "ring"
+    ],
+    "max_term_size": 30,
+    "out": "data/isobench-v1",
+    "per_heldout_theory": 300,
+    "per_theory": 2000,
+    "pool_max_size": 3,
+    "seed": 0,
+    "term_depth": 4,
+    "test_id_fraction": 0.1,
+    "train_max_dist": 4,
+    "train_theories": [
+      "group",
+      "bool"
+    ],
+    "walk_lengths": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12
+    ]
+  },
+  "counts": {
+    "test_depth": 1711,
+    "test_id": 236,
+    "test_theory": 600,
+    "train": 2053
+  },
+  "dist_histogram": {
+    "test_depth": {
+      "5": 553,
+      "6": 527,
+      "7": 164,
+      "8": 54,
+      "9": 1,
+      "None": 412
+    },
+    "test_id": {
+      "1": 10,
+      "2": 64,
+      "3": 87,
+      "4": 75
+    },
+    "test_theory": {
+      "1": 28,
+      "2": 110,
+      "3": 132,
+      "4": 126,
+      "5": 73,
+      "6": 55,
+      "7": 16,
+      "8": 3,
+      "None": 57
+    },
+    "train": {
+      "1": 71,
+      "2": 553,
+      "3": 674,
+      "4": 755
+    }
+  },
+  "format": "isobench/1",
+  "notes": [
+    "dist = exact shortest proof length in Isomer's action space (ADR-003): fresh and consumed variable values come from the problem pool (theory constants, skolems occurring in lhs/rhs, subterms of lhs/rhs of size <= pool_max_size = 3); term size <= max(|lhs|,|rhs|)+6. The action space is symmetric, so bidirectional BFS distances are exact. null when the BFS budget ran out; then dist_lb is a proven lower bound.",
+    "walk_len is only an upper bound on proof length.",
+    "every stored proof was accepted by the trusted kernel at build time."
+  ],
+  "seconds": {
+    "bfs_max": 42.964,
+    "bfs_mean": 1.866,
+    "generate": 26.6,
+    "total": 1125.8
+  },
+  "unlabelled_fraction": 0.102,
+  "walk_minus_dist": {
+    "0": 1648,
+    "1": 469,
+    "2": 762,
+    "3": 263,
+    "4": 358,
+    "5": 210,
+    "6": 231,
+    "7": 87,
+    "8": 72,
+    "9": 25,
+    "10": 6
+  }
+}
