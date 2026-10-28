@@ -14,7 +14,7 @@ Design choices, all made so that the benchmark numbers mean something:
 * **The goal test happens on generation**, as in ``bfs.forward_bfs``. Without
   reopening, the path returned is the one a goal test on pop would return,
   but it costs fewer expansions, and expansion counts stay comparable with BFS.
-* The size cap and budget checks are the shared ones (``common``), so the
+* The size cap and the budget, node-cap and time checks are the shared ones (``common``), so the
   prefix property holds.
 """
 
@@ -27,7 +27,16 @@ from functools import partial
 from ..core.proof import Problem, Proof
 from ..core.rewrite import successors
 from ..core.term import Term, size
-from .common import SEARCHERS, Budget, Parents, SearchResult, out_of_time, size_cap, steps_from_parents
+from .common import (
+    SEARCHERS,
+    Budget,
+    Parents,
+    SearchResult,
+    out_of_memory,
+    out_of_time,
+    size_cap,
+    steps_from_parents,
+)
 from .heuristics import Heuristic, size_diff, symbol_bag, zero
 
 
@@ -54,6 +63,8 @@ def best_first(problem: Problem, budget: Budget, h: Heuristic = zero, w: float =
     while heap:
         if expansions >= budget.max_expansions:
             return result("budget")
+        if out_of_memory(len(parents), budget.max_nodes):
+            return result("memory")
         if out_of_time(t0, budget.max_seconds):
             return result("time")
         _, _, g, t = heapq.heappop(heap)

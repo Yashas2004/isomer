@@ -62,13 +62,15 @@ def cmd_sample(args: argparse.Namespace) -> int:
 def cmd_data(args: argparse.Namespace) -> int:
     from .data.build import BuildConfig, build
 
-    cfg = BuildConfig(out=args.out, per_theory=args.per_theory, per_heldout_theory=args.per_heldout,
-                      bfs_budget=args.bfs_budget, seed=args.seed)
+    cfg = BuildConfig(out=args.out, train_per_theory=args.train_per_theory, eval_per_theory=args.eval_per_theory,
+                      heldout_per_theory=args.heldout_per_theory, train_label_budget=args.train_label_budget,
+                      label_budget=args.label_budget, label_max_nodes=args.label_max_nodes, seed=args.seed)
     if args.workers:
         cfg.workers = args.workers
     print(f"building {cfg.out} with {cfg.workers} worker processes ...")
     sheet = build(cfg)
-    print(json.dumps({k: sheet[k] for k in ("counts", "unlabelled_fraction", "seconds")}, indent=2))
+    print(json.dumps({k: sheet[k] for k in ("counts", "dropped", "label_stop", "max_nodes_stored", "seconds")},
+                     indent=2))
     print(f"datasheet: {cfg.out}/datasheet.json")
     return 0
 
@@ -86,7 +88,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         return 2
     cfg = BenchConfig(data=args.data, split=args.split, methods=csv(args.methods), budgets=budgets,
                       out=args.out, limit=args.limit, workers=args.workers, max_seconds=args.max_seconds,
-                      overwrite=args.overwrite, argv=tuple(args.argv))
+                      max_nodes=args.max_nodes, overwrite=args.overwrite, argv=tuple(args.argv))
     try:
         return run(cfg)
     except BenchError as exc:
@@ -117,15 +119,18 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--seed", type=int, default=0)
     sp.set_defaults(fn=cmd_sample)
     dp = sub.add_parser("data", help="build the IsoBench dataset")
-    dp.add_argument("--out", default="data/isobench-v1")
-    dp.add_argument("--per-theory", type=int, default=2000)
-    dp.add_argument("--per-heldout", type=int, default=300)
-    dp.add_argument("--bfs-budget", type=int, default=3000)
+    dp.add_argument("--out", default="data/isobench-v2")
+    dp.add_argument("--train-per-theory", type=int, default=20000)
+    dp.add_argument("--eval-per-theory", type=int, default=1200)
+    dp.add_argument("--heldout-per-theory", type=int, default=300)
+    dp.add_argument("--train-label-budget", type=int, default=3000)
+    dp.add_argument("--label-budget", type=int, default=20000, help="eval/held-out labelling expansions")
+    dp.add_argument("--label-max-nodes", type=int, default=1_500_000, help="eval/held-out node cap")
     dp.add_argument("--seed", type=int, default=0)
     dp.add_argument("--workers", type=int, default=0, help="0 = all cores but one")
     dp.set_defaults(fn=cmd_data)
     bp = sub.add_parser("bench", help="run searchers on an IsoBench split, kernel-check, summarize")
-    bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v1")
+    bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v2")
     bp.add_argument("--split", default="test_id")
     bp.add_argument("--methods", required=True, help="comma-separated searcher names")
     bp.add_argument("--budgets", required=True, help="comma-separated expansion budgets")
@@ -133,6 +138,8 @@ def main(argv: list[str] | None = None) -> int:
     bp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
     bp.add_argument("--max-seconds", type=float, default=None,
                     help="per-run wall-clock cap (breaks the prefix property; cells above it are censored)")
+    bp.add_argument("--max-nodes", type=int, default=None,
+                    help="per-run cap on stored nodes (stop = memory; cells above it are censored)")
     bp.add_argument("--out", required=True, help="run directory, e.g. runs/NAME")
     bp.add_argument("--overwrite", action="store_true")
     bp.set_defaults(fn=cmd_bench)

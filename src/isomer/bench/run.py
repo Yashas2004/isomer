@@ -11,8 +11,14 @@ expansions solves identically under any b >= e and fails under any b < e.
 **Wall-clock limits break the prefix property**, so they are handled
 explicitly. A run stopped by time after e expansions tells us only that the
 problem is unsolved for every b <= e. For b > e we do not know, so that cell is
-*censored*: excluded from n and counted separately in the summary. Without
-``--max-seconds`` nothing is ever censored.
+*censored*: excluded from n and counted separately in the summary. A node-cap
+stop (``--max-nodes``, ``stop == "memory"``) is treated the same way. Without
+``--max-seconds`` and ``--max-nodes`` nothing is ever censored.
+
+**Circularity guard.** bfs-bidir labels the data. If the largest benchmark
+budget exceeds a tenth of the split's labelling budget (``datasheet.json``),
+bidirectional BFS results risk being circular (E1, ADR-004); the run prints a
+WARNING and records ``circularity_warning`` in ``config.json``.
 
 **Solved means kernel-accepted.** The worker rebuilds the certificate from the
 dataset record's own goal (not from whatever problem the searcher claims to
@@ -62,6 +68,7 @@ class BenchConfig:
     limit: int | None = None
     workers: int = 0
     max_seconds: float | None = None
+    max_nodes: int | None = None
     overwrite: bool = False
     argv: tuple[str, ...] = ()
 
@@ -122,13 +129,13 @@ def evaluate(record: dict, split: str, method: str, max_budget: int, result: Sea
     return row
 
 
-def _run_one(args: tuple[str, dict, str, int, float | None]) -> dict:
+def _run_one(args: tuple[str, dict, str, Budget]) -> dict:
     """Worker entry point. Plain arguments only (picklable on Windows); the
     searcher is looked up by name here. Never raises: a failure becomes an
     ``"error"`` row so one bad problem cannot kill a long run."""
-    method, record, split, max_budget, max_seconds = args
+    method, record, split, budget = args
+    max_budget = budget.max_expansions
     try:
-        budget = Budget(max_expansions=max_budget, max_seconds=max_seconds)
         result = get_searcher(method)(_problem(record), budget)
         return evaluate(record, split, method, max_budget, result)
     except Exception as exc:  # noqa: BLE001 -- recorded, reported, and fails the run
@@ -147,7 +154,7 @@ def cell(row: dict, b: int) -> str:
     """Outcome of ``row`` at budget ``b``: "solved", "unsolved" or "censored"."""
     if b > row["max_budget"]:
         return "censored"
-    if row["stop"] == "time" and b > row["expansions"]:
+    if row["stop"] in ("time", "memory") and b > row["expansions"]:
         return "censored"
     if row["status"] == "ok" and row["solved"] and row["expansions"] <= b:
         return "solved"
@@ -220,6 +227,27 @@ def _git(*args: str) -> str | None:
     return cp.stdout.strip() if cp.returncode == 0 else None
 
 
+def label_budget_of(data: str, split: str) -> int | None:
+    """Expansion budget bfs-bidir had when labelling ``split``. v2 datasheets
+    record it per split; v0/v1 had one ``bfs_budget`` for everything."""
+    try:
+        sheet = json.loads((Path(data) / "datasheet.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    per_split = sheet.get("label_budget")
+    if isinstance(per_split, dict) and split in per_split:
+        return int(per_split[split])
+    legacy = sheet.get("config", {}).get("bfs_budget")
+    return int(legacy) if legacy is not None else None
+
+
+def circularity_warning(max_budget: int, label_budget: int | None) -> bool | None:
+    """True if benchmark budgets come within 10x of the labelling budget, where
+    bfs-bidir's results stop being independent of how the data was labelled.
+    None if the labelling budget is unknown."""
+    return None if label_budget is None else max_budget > label_budget / 10
+
+
 def _config_json(cfg: BenchConfig, budget: Budget, n_problems: int, workers: int) -> dict:
     sheet = Path(cfg.data) / "datasheet.json"
     try:
@@ -269,12 +297,18 @@ def run(cfg: BenchConfig) -> int:
     if out.exists() and not cfg.overwrite:
         raise BenchError(f"{out} already exists; pass --overwrite to replace its results")
 
-    budget = Budget(max_expansions=max(cfg.budgets), max_seconds=cfg.max_seconds)
-    jobs = [(m, r, cfg.split, budget.max_expansions, cfg.max_seconds)
-            for m in sorted(cfg.methods) for r in records]
+    budget = Budget(max_expansions=max(cfg.budgets), max_seconds=cfg.max_seconds, max_nodes=cfg.max_nodes)
+    jobs = [(m, r, cfg.split, budget) for m in sorted(cfg.methods) for r in records]
     workers = cfg.workers or max(1, (os.cpu_count() or 2) - 1)
     print(f"bench: {len(cfg.methods)} methods x {len(records)} problems ({cfg.split}), "
           f"max budget {budget.max_expansions}, {workers} worker(s)", flush=True)
+    label_budget = label_budget_of(cfg.data, cfg.split)
+    warn = circularity_warning(budget.max_expansions, label_budget)
+    if warn is None:
+        print(f"note: no labelling budget in {cfg.data}/datasheet.json; circularity not checked", flush=True)
+    elif warn:
+        print(f"WARNING: circularity risk: max budget {budget.max_expansions} > label budget {label_budget} / 10 "
+              f"for split {cfg.split} (bfs-bidir is the labeller; see ADR-004)", flush=True)
 
     # 2. Run. workers=1 stays in-process: deterministic and easy to debug.
     t0 = time.perf_counter()
@@ -303,7 +337,9 @@ def run(cfg: BenchConfig) -> int:
     with open(out / "results.jsonl", "w", encoding="utf-8") as f:
         f.writelines(json.dumps(r, sort_keys=True) + "\n" for r in rows)
     (out / "config.json").write_text(
-        json.dumps(_config_json(cfg, budget, len(records), workers), indent=2, sort_keys=True), encoding="utf-8")
+        json.dumps(_config_json(cfg, budget, len(records), workers) | {
+            "label_budget": label_budget, "circularity_warning": warn}, indent=2, sort_keys=True),
+        encoding="utf-8")
 
     # 4. Report.
     summary = summarize(rows, cfg.budgets)

@@ -114,3 +114,38 @@ def test_prefix_property(results, name):
             assert rb.solved and rb.proof.steps == r.proof.steps and rb.expansions == e, (i, b)
         if e > 0:
             assert not SEARCHERS[name](p, Budget(max_expansions=e - 1)).solved, i
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_node_cap(results, name):
+    """A node-capped run is the uncapped run cut off at the first expansion
+    that starts with >= max_nodes stored, so it is reproducible and its lower
+    bound is as valid as a budget stop's."""
+    cap = 50
+    stops = 0
+    for i, p in enumerate(PROBLEMS):
+        c = SEARCHERS[name](p, Budget(max_expansions=BUDGET.max_expansions, max_nodes=cap))
+        if c.stats["stop"] != "memory":
+            assert c.solved == results[name, i].solved and c.expansions == results[name, i].expansions
+            continue
+        stops += 1
+        e = c.expansions
+        cut = SEARCHERS[name](p, Budget(max_expansions=e))
+        assert (cut.expansions, cut.stats["nodes_stored"], cut.lower_bound, cut.solved) == \
+               (e, c.stats["nodes_stored"], c.lower_bound, False)
+        assert c.stats["nodes_stored"] >= cap
+        if e > 0:  # the cap fired at the first check that saw >= cap nodes
+            assert SEARCHERS[name](p, Budget(max_expansions=e - 1)).stats["nodes_stored"] < cap
+        full = results[name, i]
+        if name.startswith("bfs") and full.solved:
+            assert c.lower_bound <= len(full.proof.steps)
+    assert stops > 0
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_huge_node_cap_changes_nothing(results, name):
+    """The prefix property and every result are untouched by a cap that never binds."""
+    for i, p in enumerate(PROBLEMS):
+        a, b = results[name, i], SEARCHERS[name](p, Budget(max_expansions=BUDGET.max_expansions, max_nodes=10**9))
+        assert (a.expansions, a.stats, a.lower_bound) == (b.expansions, b.stats, b.lower_bound)
+        assert (a.proof.steps if a.proof else None) == (b.proof.steps if b.proof else None)

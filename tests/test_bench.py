@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from isomer.bench.run import _problem, cell, evaluate, summarize, wilson
+from isomer.bench.run import _problem, cell, circularity_warning, evaluate, label_budget_of, summarize, wilson
 from isomer.cli import main
 from isomer.core.proof import Problem, Proof
 from isomer.core.rewrite import Step
@@ -62,6 +62,9 @@ def test_run_writes_rows_and_config(data, run_dir):
                 "budget", "dataset_format"):
         assert key in cfg
     assert cfg["dataset_format"] == FORMAT_VERSION and cfg["budget"]["max_expansions"] == 300
+    assert cfg["budget"]["max_nodes"] is None
+    # tiny_data labels train with 300 expansions, so a 300 benchmark is flagged.
+    assert cfg["label_budget"] == 300 and cfg["circularity_warning"] is True
     # Re-verify logged proofs from scratch: nothing from the runner is trusted.
     solved = [r for r in rows if r["solved"]]
     assert solved
@@ -107,6 +110,11 @@ def _row(**kw):
 def test_censoring():
     timed = _row(stop="time", expansions=50)
     assert cell(timed, 30) == "unsolved" and cell(timed, 50) == "unsolved" and cell(timed, 100) == "censored"
+    # A node-cap stop is censored above the expansions it reached, exactly like time.
+    capped = _row(stop="memory", expansions=50)
+    assert cell(capped, 30) == "unsolved" and cell(capped, 50) == "unsolved" and cell(capped, 100) == "censored"
+    s = {x["budget"]: x for x in summarize([capped, _row(stop="budget", expansions=1000)], [50, 100])}
+    assert (s[50]["n"], s[50]["censored"]) == (2, 0) and (s[100]["n"], s[100]["censored"]) == (1, 1)
     assert cell(_row(max_budget=100), 300) == "censored"
     assert cell(_row(status="unsound", solved=False, stop="solved"), 100) == "unsolved"
     assert cell(_row(status="error", expansions=None, stop=None), 100) == "unsolved"
@@ -174,3 +182,35 @@ def test_clear_errors(data, tmp_path, capsys):
                  "--budgets", "10", "--out", str(tmp_path / "y")]) == 2
     assert "test_theory" in capsys.readouterr().err  # lists available splits
     assert not (tmp_path / "x").exists() and not (tmp_path / "y").exists()
+
+
+def test_circularity_guard_rule(tmp_path):
+    assert circularity_warning(1000, 20000) is False and circularity_warning(2001, 20000) is True
+    assert circularity_warning(1000, None) is None
+    assert label_budget_of(str(tmp_path), "train") is None          # no datasheet
+    (tmp_path / "datasheet.json").write_text(json.dumps({"config": {"bfs_budget": 3000}}), encoding="utf-8")
+    assert label_budget_of(str(tmp_path), "test_depth") == 3000     # v0/v1: one budget for all splits
+    (tmp_path / "datasheet.json").write_text(
+        json.dumps({"label_budget": {"train": 3000, "test_depth": 20000}}), encoding="utf-8")
+    assert label_budget_of(str(tmp_path), "test_depth") == 20000
+
+
+def test_circularity_guard_end_to_end(data, tmp_path, capsys):
+    out = tmp_path / "low"
+    assert main(["bench", "--data", str(data), "--split", SPLIT, "--methods", "ucs",
+                 "--budgets", "10,30", "--workers", "1", "--out", str(out)]) == 0
+    assert "WARNING: circularity" not in capsys.readouterr().out
+    assert json.loads((out / "config.json").read_text(encoding="utf-8"))["circularity_warning"] is False
+    assert bench(data, tmp_path / "high", "ucs") == 0
+    assert "WARNING: circularity risk" in capsys.readouterr().out
+
+
+def test_max_nodes_flag_censors(data, tmp_path):
+    out = tmp_path / "capped"
+    assert bench(data, out, "bfs-fwd", "--max-nodes", "50") == 0
+    assert json.loads((out / "config.json").read_text(encoding="utf-8"))["budget"]["max_nodes"] == 50
+    stopped = [r for r in read_rows(out) if r["stop"] == "memory"]
+    assert stopped
+    for r in stopped:
+        assert not r["solved"]
+        assert cell(r, r["expansions"]) == "unsolved" and cell(r, r["expansions"] + 1) == "censored"

@@ -11,7 +11,14 @@ Every result carries two required stats:
   it returns. It is a memory proxy that does not depend on the machine, for
   the memory-matched comparisons in DESIGN.md §4.
 * ``stats["stop"]``: why the search ended: ``"solved"``, ``"budget"``,
-  ``"time"`` or ``"exhausted"``.
+  ``"time"``, ``"memory"`` or ``"exhausted"``.
+
+**Memory cap.** ``Budget.max_nodes`` bounds ``nodes_stored``. Like the
+expansion budget it is checked only *before* an expansion, so the final count
+can overshoot by one expansion's successors. A node stop is deterministic
+(unlike a time stop), but the benchmark still censors it above the expansions
+reached: the budgets we report are expansion budgets, and an uncapped run
+might have solved the problem there.
 
 **Prefix property.** Every searcher makes the same choices whatever the
 budget, and it checks the expansion budget only *before* an expansion. So a
@@ -51,12 +58,13 @@ class SearchResult:
 @dataclass(frozen=True)
 class Budget:
     """Limits shared by all searchers. ``max_size_slack`` and ``pool_max_size``
-    define the action space (ADR-002, ADR-003); the other two cap compute.
+    define the action space (ADR-002, ADR-003); the other three cap compute.
     Keep ``max_seconds=None`` for reproducible runs (see module docstring)."""
     max_expansions: int = 1000
     max_seconds: float | None = None
     max_size_slack: int = 6
     pool_max_size: int = 3
+    max_nodes: int | None = None   # cap on nodes_stored (ADR-004)
 
 
 class Searcher(Protocol):
@@ -80,6 +88,10 @@ def size_cap(problem: Problem, slack: int) -> int:
 
 def out_of_time(t0: float, max_seconds: float | None) -> bool:
     return max_seconds is not None and time.perf_counter() - t0 > max_seconds
+
+
+def out_of_memory(nodes: int, max_nodes: int | None) -> bool:
+    return max_nodes is not None and nodes >= max_nodes
 
 
 # parent map: term -> (previous term, step that turned previous into term)

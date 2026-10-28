@@ -20,17 +20,29 @@ import time
 from ..core.proof import Problem, Proof
 from ..core.rewrite import Rule, Step, invert_step, successors
 from ..core.term import Term, size
-from .common import SEARCHERS, Budget, Parents, SearchResult, out_of_time, size_cap, steps_from_parents
+from .common import (
+    SEARCHERS,
+    Budget,
+    Parents,
+    SearchResult,
+    out_of_memory,
+    out_of_time,
+    size_cap,
+    steps_from_parents,
+)
 
 __all__ = ["SearchResult", "bidir_bfs", "bidirectional_bfs", "forward_bfs"]
 
 
 def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: int | None = None,
                       max_depth: int = 64, pool_max_size: int = 3,
-                      max_seconds: float | None = None) -> SearchResult:
+                      max_seconds: float | None = None, max_nodes: int | None = None) -> SearchResult:
     """Grow BFS layers from both ends, always expanding the smaller frontier,
     until the two explored sets meet. Returns a shortest proof under the
-    action-space limits above (layer-complete expansion guarantees this)."""
+    action-space limits above (layer-complete expansion guarantees this).
+
+    On any stop the lower bound counts only *completed* layers, so it stays
+    proven whether the budget, the clock or the node cap ran out."""
     t0 = time.perf_counter()
     rules = problem.theory.rules()
     rule_list = list(rules.values())
@@ -64,6 +76,8 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
         for t in frontier:
             if expansions >= max_expansions:
                 return fail("budget")
+            if out_of_memory(len(fwd) + len(bwd), max_nodes):
+                return fail("memory")
             if out_of_time(t0, max_seconds):
                 return fail("time")
             expansions += 1
@@ -112,7 +126,8 @@ def bidir_bfs(problem: Problem, budget: Budget) -> SearchResult:
     """``bidirectional_bfs`` behind the shared ``Budget`` interface."""
     return bidirectional_bfs(problem, max_expansions=budget.max_expansions,
                              max_size=size_cap(problem, budget.max_size_slack),
-                             pool_max_size=budget.pool_max_size, max_seconds=budget.max_seconds)
+                             pool_max_size=budget.pool_max_size, max_seconds=budget.max_seconds,
+                             max_nodes=budget.max_nodes)
 
 
 def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
@@ -143,6 +158,8 @@ def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
         for t in frontier:
             if expansions >= budget.max_expansions:
                 return result("budget", depth=depth)
+            if out_of_memory(len(parents), budget.max_nodes):
+                return result("memory", depth=depth)
             if out_of_time(t0, budget.max_seconds):
                 return result("time", depth=depth)
             expansions += 1

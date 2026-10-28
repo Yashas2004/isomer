@@ -1,25 +1,70 @@
 import json
 
-from isomer.data.build import BuildConfig, build, problem_id
+from conftest import tiny_v2_config
+
+from isomer.core import kernel
+from isomer.core.proof import Problem, Proof
+from isomer.core.rewrite import Step
+from isomer.core.theories import THEORIES
+from isomer.data.build import FORMAT_VERSION, SPLITS, build, problem_id, walk_in_action_space
 
 
 def test_problem_id_is_symmetric():
     assert problem_id("group", "a", "(* e a)") == problem_id("group", "(* e a)", "a")
 
 
-def test_small_build_is_deterministic_and_verified(tmp_path):
-    def run(out):
-        cfg = BuildConfig(out=str(out), per_theory=15, per_heldout_theory=5, bfs_budget=300, workers=1)
-        sheet = build(cfg, progress=False)
-        return sheet, {f.name: f.read_text() for f in out.glob("*.jsonl")}
+def _build(out):
+    sheet = build(tiny_v2_config(out), progress=False)
+    files = {f.name: f.read_bytes() for f in sorted(out.glob("*.jsonl"))}
+    recs = {s: [json.loads(line) for line in files[f"{s}.jsonl"].decode().splitlines()] for s in SPLITS}
+    return sheet, files, recs
 
-    sheet1, files1 = run(tmp_path / "a")
-    _, files2 = run(tmp_path / "b")
+
+def test_small_v2_build(tmp_path):
+    sheet, files1, recs = _build(tmp_path / "a")
+    _, files2, _ = _build(tmp_path / "b")
     assert files1 == files2  # byte-identical rebuild
-    assert sum(sheet1["counts"].values()) == 2 * 15 + 2 * 5
-    for line in files1["train.jsonl"].splitlines():
-        rec = json.loads(line)
-        assert rec["dist"] is not None and rec["dist"] <= 4 and rec["theory"] in ("group", "bool")
-        assert len(rec["proof"]) == rec["dist"]
-    ids = [json.loads(l)["id"] for f in files1.values() for l in f.splitlines()]
-    assert len(ids) == len(set(ids))  # no duplicates across splits
+    assert set(files1) == {f"{s}.jsonl" for s in SPLITS}
+    assert sheet["format"] == FORMAT_VERSION == "isobench/2"
+    cfg = tiny_v2_config(tmp_path)
+    assert sheet["label_budget"] == {"train": 300, "test_id": 300, "test_depth": 500, "test_deep": 500,
+                                     "test_theory": 500}
+    assert sheet["counts"] == {s: len(r) for s, r in recs.items()}
+    assert sheet["counts"]["train"] > 0 and sheet["counts"]["test_theory"] == 6
+
+    # A problem lands in exactly one split.
+    ids = [r["id"] for rs in recs.values() for r in rs]
+    assert len(ids) == len(set(ids))
+
+    for split, rs in recs.items():
+        for r in rs:
+            # Bounds: dist_lb <= dist <= dist_ub, or dist_lb <= dist_ub when dist is unknown.
+            if r["dist"] is not None:
+                assert r["dist_lb"] <= r["dist"] <= r["dist_ub"] and len(r["proof"]) == r["dist"]
+            else:
+                assert r["dist_lb"] <= r["dist_ub"] == len(r["proof"]) == r["walk_len"]
+            # Every stored proof is accepted by the trusted kernel.
+            theory, _ = THEORIES[r["theory"]]
+            proof = Proof(Problem.parse(theory, r["lhs"], r["rhs"]), tuple(Step.from_json(s) for s in r["proof"]))
+            assert kernel.check_certificate(proof.certificate()), (split, r["id"])
+            # Split rules.
+            if split in ("train", "test_id"):
+                assert r["theory"] in cfg.train_theories and r["dist"] is not None
+                assert r["dist"] <= cfg.train_max_dist and r["walk_len"] <= max(cfg.train_walk_lengths)
+            elif split == "test_depth":
+                assert r["theory"] in cfg.train_theories and r["dist"] > cfg.train_max_dist
+            elif split == "test_deep":
+                assert r["theory"] in cfg.train_theories and r["dist"] is None
+            else:
+                assert r["theory"] in cfg.heldout_theories
+
+
+def test_walk_cap_check():
+    """A walk is a valid dist_ub only if every term stays within the size cap
+    max(|lhs|, |rhs|) + slack; one that detours through bigger terms is rejected."""
+    theory, _ = THEORIES["group"]
+    up, down = Step("id_l~", ()), Step("id_l", ())
+    # a -> (* e a) -> (* e (* e a)) -> (* e a): sizes 1, 3, 5, 3; cap = 3 + slack.
+    walk = Proof(Problem.parse(theory, "a", "(* e a)"), (up, up, down))
+    assert walk.verify()
+    assert walk_in_action_space(walk, slack=2) and not walk_in_action_space(walk, slack=1)

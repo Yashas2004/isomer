@@ -29,8 +29,11 @@ pytest
 python -m isomer demo
 python -m isomer sample --theory group -n 5 -k 6
 
-# 5. Build IsoBench v0 (uses all CPU cores but one; ~10-30 min on a laptop)
-python -m isomer data --out data/isobench-v1
+# 5. Build IsoBench v2 (ADR-004) into data/isobench-v2.
+#    About 28,600 CPU-seconds: ~2.7 h with 3 workers, ~1.4 h with 6.
+#    Each worker can peak at ~2.3 GiB (1.5M-node labelling cap), so pick
+#    --workers <= free RAM in GiB / 2.3 (e.g. 5 with ~12 GiB free).
+python -m isomer data --workers N
 ```
 
 In VS Code: install the *Python* extension, `Ctrl+Shift+P → Python: Select
