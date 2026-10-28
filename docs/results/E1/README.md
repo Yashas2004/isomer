@@ -16,5 +16,5 @@ Plan: docs/experiments/E1-baselines.md (pre-registered 2026-10-28). Commit: `3ec
 ## Other findings
 - The benefit of a crude goal-directed heuristic grows with proof depth: none on test_id (dist <= 4), about 2x on test_depth.
 - It costs proof quality: fair optimality gap 1.168 for symbol_bag-w1 on the 99 problems all methods solved in test_depth.
-- symbol_bag solves a few test_depth problems that the labeller (bidirectional BFS, budget 3000) could not.
+- symbol_bag solves problems that the labeller (bidirectional BFS, budget 3000) could not: symbol_bag-w1 4 and symbol_bag-w3 4 on test_depth, symbol_bag-w3 1 on test_theory.
 - Target for a learned heuristic: beat symbol_bag-w1 (34.0% on test_depth at 3000) by a significant margin in forward search.
