@@ -16,6 +16,7 @@ the forward steps and bidirectional distances are exact.
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 
 from ..core.proof import Problem, Proof
 from ..core.rewrite import Rule, Step, invert_step, successors
@@ -36,17 +37,24 @@ __all__ = ["SearchResult", "bidir_bfs", "bidirectional_bfs", "forward_bfs"]
 
 def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: int | None = None,
                       max_depth: int = 64, pool_max_size: int = 3,
-                      max_seconds: float | None = None, max_nodes: int | None = None) -> SearchResult:
+                      max_seconds: float | None = None, max_nodes: int | None = None,
+                      pool: Sequence[Term] | None = None) -> SearchResult:
     """Grow BFS layers from both ends, always expanding the smaller frontier,
     until the two explored sets meet. Returns a shortest proof under the
     action-space limits above (layer-complete expansion guarantees this).
 
     On any stop the lower bound counts only *completed* layers, so it stays
-    proven whether the budget, the clock or the node cap ran out."""
+    proven whether the budget, the clock or the node cap ran out.
+
+    ``pool`` overrides the problem's own pool. Distances of intermediate
+    states must be measured in the *original* problem's action space: a fresh
+    ``Problem(state, goal)`` would compute a different pool (and size cap)
+    from its own sides. Pass the original pool here and its cap as
+    ``max_size``."""
     t0 = time.perf_counter()
     rules = problem.theory.rules()
     rule_list = list(rules.values())
-    pool = problem.pool(pool_max_size)
+    pool = problem.pool(pool_max_size) if pool is None else tuple(pool)
     if max_size is None:
         max_size = size_cap(problem, 6)
 

@@ -70,3 +70,13 @@ def test_every_step_is_invertible(name):
         for before, after, step in zip(terms, terms[1:], p.steps):
             back = invert_step(rules[step.rule], before, step)
             assert Proof(Problem(theory, after, before), (back,)).verify()
+
+
+def test_explicit_pool_equals_default():
+    """Passing the problem's own pool changes nothing (ADR-003 default)."""
+    for lhs, rhs in [("(* e (* (inv a) a))", "e"), ("(* (inv (inv a)) b)", "(* a b)")]:
+        p = Problem.parse(GROUP, lhs, rhs)
+        a, b = bidirectional_bfs(p, max_expansions=500), bidirectional_bfs(p, max_expansions=500, pool=p.pool())
+        assert (a.proof.steps if a.proof else None) == (b.proof.steps if b.proof else None)
+        assert (a.expansions, a.generated, a.lower_bound, a.stats) == (b.expansions, b.generated, b.lower_bound,
+                                                                         b.stats)

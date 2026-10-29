@@ -75,6 +75,20 @@ def cmd_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_states(args: argparse.Namespace) -> int:
+    from .learn.states import StatesConfig, build_states
+
+    cfg = StatesConfig(data=args.data, out=args.out, offpath=args.offpath, budget=args.budget, limit=args.limit)
+    if args.workers:
+        cfg.workers = args.workers
+    print(f"building {cfg.out} from {cfg.data}/train.jsonl with {cfg.workers} worker processes ...")
+    stats = build_states(cfg)
+    print(json.dumps({k: stats[k] for k in ("problems", "counts", "on_off_path", "dropped", "max_tokens", "seconds")},
+                     indent=2))
+    print(f"stats: {cfg.out}/stats.json")
+    return 0
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     from .bench.run import BenchConfig, BenchError, run
 
@@ -129,6 +143,14 @@ def main(argv: list[str] | None = None) -> int:
     dp.add_argument("--seed", type=int, default=0)
     dp.add_argument("--workers", type=int, default=0, help="0 = all cores but one")
     dp.set_defaults(fn=cmd_data)
+    stp = sub.add_parser("states", help="distance-labelled (state, goal) examples from train.jsonl")
+    stp.add_argument("--data", default="data/isobench-v2")
+    stp.add_argument("--out", default="data/states-v2")
+    stp.add_argument("--offpath", type=int, default=3, help="off-path successors per on-path state")
+    stp.add_argument("--budget", type=int, default=3000, help="BFS expansions per off-path label")
+    stp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
+    stp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
+    stp.set_defaults(fn=cmd_states)
     bp = sub.add_parser("bench", help="run searchers on an IsoBench split, kernel-check, summarize")
     bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v2")
     bp.add_argument("--split", default="test_id")
