@@ -1,0 +1,290 @@
+{
+  "by_theory": {
+    "test_deep": {
+      "bool": 541,
+      "group": 226
+    },
+    "test_depth": {
+      "bool": 497,
+      "group": 707
+    },
+    "test_id": {
+      "bool": 822,
+      "group": 788
+    },
+    "test_theory": {
+      "lattice": 300,
+      "ring": 300
+    },
+    "train": {
+      "bool": 15187,
+      "group": 15628
+    }
+  },
+  "config": {
+    "eval_per_theory": 1200,
+    "eval_walk_lengths": [
+      6,
+      8,
+      10,
+      12,
+      16,
+      20,
+      24
+    ],
+    "heldout_per_theory": 300,
+    "heldout_theories": [
+      "lattice",
+      "ring"
+    ],
+    "heldout_walk_lengths": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "label_budget": 20000,
+    "label_max_nodes": 1500000,
+    "max_size_slack": 6,
+    "max_term_size": 30,
+    "out": "data/isobench-v2",
+    "pool_max_size": 3,
+    "seed": 0,
+    "term_depth": 4,
+    "test_id_fraction": 0.05,
+    "train_label_budget": 3000,
+    "train_max_dist": 4,
+    "train_per_theory": 20000,
+    "train_theories": [
+      "group",
+      "bool"
+    ],
+    "train_walk_lengths": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ]
+  },
+  "counts": {
+    "test_deep": 767,
+    "test_depth": 1204,
+    "test_id": 1610,
+    "test_theory": 600,
+    "train": 30815
+  },
+  "dist_histogram": {
+    "test_depth": {
+      "10": 15,
+      "5": 281,
+      "6": 389,
+      "7": 234,
+      "8": 207,
+      "9": 78
+    },
+    "test_id": {
+      "1": 278,
+      "2": 412,
+      "3": 464,
+      "4": 456
+    },
+    "test_theory": {
+      "1": 8,
+      "2": 79,
+      "3": 118,
+      "4": 126,
+      "5": 95,
+      "6": 76,
+      "7": 41,
+      "8": 12,
+      "9": 3,
+      "None": 42
+    },
+    "train": {
+      "1": 5525,
+      "2": 7928,
+      "3": 8890,
+      "4": 8472
+    }
+  },
+  "dist_lb_histogram": {
+    "test_deep": {
+      "10": 25,
+      "11": 2,
+      "7": 273,
+      "8": 298,
+      "9": 169
+    }
+  },
+  "dist_ub_histogram": {
+    "test_deep": {
+      "10": 41,
+      "12": 76,
+      "16": 170,
+      "20": 219,
+      "24": 244,
+      "8": 17
+    },
+    "test_depth": {
+      "10": 15,
+      "5": 281,
+      "6": 389,
+      "7": 234,
+      "8": 207,
+      "9": 78
+    },
+    "test_id": {
+      "1": 278,
+      "2": 412,
+      "3": 464,
+      "4": 456
+    },
+    "test_theory": {
+      "1": 8,
+      "10": 6,
+      "11": 10,
+      "12": 14,
+      "2": 79,
+      "3": 118,
+      "4": 126,
+      "5": 95,
+      "6": 76,
+      "7": 42,
+      "8": 16,
+      "9": 10
+    },
+    "train": {
+      "1": 5525,
+      "2": 7928,
+      "3": 8890,
+      "4": 8472
+    }
+  },
+  "dropped": {
+    "eval (dist <= train_max_dist)": 429,
+    "train (dist unknown or > train_max_dist)": 7575
+  },
+  "format": "isobench/2",
+  "generated": {
+    "eval": 2400,
+    "heldout": 600,
+    "train": 40000
+  },
+  "label_budget": {
+    "test_deep": 20000,
+    "test_depth": 20000,
+    "test_id": 3000,
+    "test_theory": 20000,
+    "train": 3000
+  },
+  "label_stop": {
+    "eval": {
+      "budget": 767,
+      "solved": 1633
+    },
+    "heldout": {
+      "budget": 32,
+      "memory": 10,
+      "solved": 558
+    },
+    "train": {
+      "budget": 59,
+      "solved": 39941
+    }
+  },
+  "max_nodes_stored": {
+    "eval": 966537,
+    "heldout": 1500325,
+    "train": 171103
+  },
+  "notes": [
+    "dist = exact shortest proof length in Isomer's action space (ADR-003): fresh and consumed variable values come from the problem pool (theory constants, skolems occurring in lhs/rhs, subterms of lhs/rhs of size <= pool_max_size = 3); term size <= max(|lhs|,|rhs|)+6. The action space is symmetric, so bidirectional BFS distances are exact. dist is null when the labeller stopped first.",
+    "eval and held-out problems (test_depth, test_deep, test_theory) were labelled with 20000 expansions, 20x the largest recommended benchmark budget (1000), and a cap of 1500000 stored nodes; label_stop says which limit ended the search. Train and test_id were labelled with 3000 expansions and contain only problems bidirectional BFS solved within that budget with dist <= 4.",
+    "test_deep holds eval problems with no exact dist. Grade them by the certified lower bound dist_lb (proven from completed BFS layers), never by dist_ub.",
+    "dist_ub = length of the best known proof (the BFS proof if found, else the random walk). Walks that leave the size cap are rejected at generation, so dist_lb <= dist <= dist_ub always holds.",
+    "every stored proof was accepted by the trusted kernel at build time."
+  ],
+  "seconds": {
+    "generate": {
+      "eval": 17.5,
+      "heldout": 3.3,
+      "train": 51.6
+    },
+    "label_max": {
+      "eval": 62.784,
+      "heldout": 132.94,
+      "train": 6.665
+    },
+    "label_mean": {
+      "eval": 10.214,
+      "heldout": 6.798,
+      "train": 0.054
+    },
+    "label_wall": {
+      "eval+heldout": 5771.9,
+      "train": 438.2
+    },
+    "total": 6283.0
+  },
+  "walk_minus_dist": {
+    "eval": {
+      "0": 128,
+      "1": 113,
+      "10": 46,
+      "11": 54,
+      "12": 48,
+      "13": 47,
+      "14": 21,
+      "15": 30,
+      "16": 35,
+      "17": 26,
+      "18": 12,
+      "19": 5,
+      "2": 263,
+      "20": 2,
+      "21": 1,
+      "3": 172,
+      "4": 193,
+      "5": 117,
+      "6": 120,
+      "7": 71,
+      "8": 85,
+      "9": 44
+    },
+    "heldout": {
+      "0": 174,
+      "1": 39,
+      "10": 1,
+      "2": 110,
+      "3": 38,
+      "4": 74,
+      "5": 41,
+      "6": 41,
+      "7": 25,
+      "8": 13,
+      "9": 2
+    },
+    "train": {
+      "0": 25602,
+      "1": 5564,
+      "2": 6761,
+      "3": 1332,
+      "4": 648,
+      "5": 34
+    }
+  },
+  "walks_rejected_outside_size_cap": {
+    "eval": 14,
+    "heldout": 0,
+    "train": 5
+  }
+}
