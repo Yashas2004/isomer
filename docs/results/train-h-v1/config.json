@@ -1,0 +1,94 @@
+{
+  "args": {
+    "argv": [
+      "C:\\Users\\Yashas\\isomer\\src\\isomer\\__main__.py",
+      "train",
+      "--states",
+      "data/states-v2",
+      "--out",
+      "runs/h-v1",
+      "--epochs",
+      "20"
+    ],
+    "batch_problems": 64,
+    "d_model": 256,
+    "device": "cuda",
+    "epochs": 20,
+    "grad_clip": 1.0,
+    "heads": 8,
+    "lambda_rank": 1.0,
+    "layers": 6,
+    "log_every": 50,
+    "lr": 0.0003,
+    "max_len": 192,
+    "max_steps": null,
+    "micro_tokens": 32768,
+    "out": "runs/h-v1",
+    "overwrite": false,
+    "rank_target": "optimal",
+    "seed": 0,
+    "states": "data/states-v2",
+    "tau": 1.0,
+    "warmup": 500,
+    "weight_decay": 0.01
+  },
+  "argv": [
+    "C:\\Users\\Yashas\\isomer\\src\\isomer\\__main__.py",
+    "train",
+    "--states",
+    "data/states-v2",
+    "--out",
+    "runs/h-v1",
+    "--epochs",
+    "20"
+  ],
+  "cuda": "12.6",
+  "data": {
+    "load_seconds": 36.5,
+    "source_train_sha256": "45cb366b9694ab2cb4392aea2f0719dd92ecf110de10bcb2596f19c2c720f9d5",
+    "states_stats_sha256": "1bedf2821e160f3ac90231c51f17aa30a8afb5f442c673f67ad6a76b048cd0be",
+    "train_groups": 77410,
+    "train_problems": 29268,
+    "train_singleton_groups": 385,
+    "train_states": 551072,
+    "val_groups": 4109,
+    "val_problems": 1547,
+    "val_singleton_groups": 35,
+    "val_states": 29143
+  },
+  "deterministic": "seeded; CUDA kernels are not bit-deterministic, GPU runs repeat only statistically",
+  "git_commit": "0e4c535291c88feb8ccd18aa8638d692a1dfc5cc",
+  "git_dirty": false,
+  "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+  "model": {
+    "d_model": 256,
+    "ffn_hidden": 683,
+    "max_len": 192,
+    "n_heads": 8,
+    "n_layers": 6,
+    "rope_base": 10000.0,
+    "vocab_size": 29
+  },
+  "param_count": 4731649,
+  "platform": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.11",
+  "steps_per_epoch": 458,
+  "torch": "2.14.1+cu126",
+  "total_steps": 9160,
+  "val_baselines": {
+    "size_diff": {
+      "groups": 4109,
+      "top1_onpath": 0.29528966612198543,
+      "top1_onpath_strict": 0.13312241421270382,
+      "top1_optimal": 0.3264083486887088,
+      "top1_optimal_strict": 0.13969335604770017
+    },
+    "symbol_bag": {
+      "groups": 4109,
+      "top1_onpath": 0.4335303456987565,
+      "top1_onpath_strict": 0.23460696033098077,
+      "top1_optimal": 0.5007509647811424,
+      "top1_optimal_strict": 0.2587004137259674
+    }
+  }
+}
