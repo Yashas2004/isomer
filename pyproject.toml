@@ -10,8 +10,10 @@ requires-python = ">=3.10"
 dependencies = ["numpy>=1.26"]
 
 [project.optional-dependencies]
-# torch is installed separately (CUDA wheel) -- see README.
 dev = ["pytest>=8", "hypothesis>=6.100", "ruff>=0.6"]
+# Only isomer.learn.{model,train,infer} import torch. For the GPU, install the CUDA
+# wheel first (README); this extra then just checks the version.
+learn = ["torch>=2.2"]
 # Only `isomer report` needs these; the core package imports and tests without them.
 plots = ["matplotlib>=3.7"]
 

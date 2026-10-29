@@ -34,6 +34,13 @@ python -m isomer sample --theory group -n 5 -k 6
 #    Each worker can peak at ~2.3 GiB (1.5M-node labelling cap), so pick
 #    --workers <= free RAM in GiB / 2.3 (e.g. 5 with ~12 GiB free).
 python -m isomer data --workers N
+
+# 6. Distance-labelled states for the learned heuristic (from train.jsonl only).
+python -m isomer states --workers N
+
+# 7. Train h(state, goal) (needs torch; everything else in isomer runs without it).
+#    bf16 on CUDA; batches are micro-batched to stay within 4 GB (--micro-tokens).
+python -m isomer train --states data/states-v2 --out runs/NAME
 ```
 
 In VS Code: install the *Python* extension, `Ctrl+Shift+P → Python: Select

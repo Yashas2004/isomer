@@ -89,6 +89,20 @@ def cmd_states(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_train(args: argparse.Namespace) -> int:
+    try:  # torch is optional for the rest of isomer: import it only here
+        from .learn.train import TrainConfig, main_train
+    except ImportError as exc:
+        print(f"error: training needs torch ({exc}); pip install -e \".[learn]\" or see README", file=sys.stderr)
+        return 2
+    cfg = TrainConfig(states=args.states, out=args.out, epochs=args.epochs, batch_problems=args.batch_problems,
+                      lr=args.lr, warmup=args.warmup, d_model=args.d_model, layers=args.layers, heads=args.heads,
+                      lambda_rank=args.lambda_rank, tau=args.tau, rank_target=args.rank_target,
+                      micro_tokens=args.micro_tokens, seed=args.seed, device=args.device, max_steps=args.max_steps,
+                      overwrite=args.overwrite, argv=tuple(args.argv))
+    return main_train(cfg)
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     from .bench.run import BenchConfig, BenchError, run
 
@@ -151,6 +165,25 @@ def main(argv: list[str] | None = None) -> int:
     stp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
     stp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
     stp.set_defaults(fn=cmd_states)
+    tp = sub.add_parser("train", help="train the learned distance heuristic h(state, goal)")
+    tp.add_argument("--states", default="data/states-v2")
+    tp.add_argument("--out", required=True, help="run directory, e.g. runs/NAME")
+    tp.add_argument("--epochs", type=int, default=20)
+    tp.add_argument("--batch-problems", type=int, default=64, help="problems (all their states) per batch")
+    tp.add_argument("--lr", type=float, default=3e-4)
+    tp.add_argument("--warmup", type=int, default=500, help="linear warmup steps before cosine decay")
+    tp.add_argument("--d-model", type=int, default=256)
+    tp.add_argument("--layers", type=int, default=6)
+    tp.add_argument("--heads", type=int, default=8)
+    tp.add_argument("--lambda-rank", type=float, default=1.0)
+    tp.add_argument("--tau", type=float, default=1.0)
+    tp.add_argument("--rank-target", default="optimal", choices=["optimal", "onpath"])
+    tp.add_argument("--micro-tokens", type=int, default=32_768, help="padded tokens per micro-batch (GPU memory)")
+    tp.add_argument("--seed", type=int, default=0)
+    tp.add_argument("--device", default="cuda")
+    tp.add_argument("--max-steps", type=int, default=None)
+    tp.add_argument("--overwrite", action="store_true")
+    tp.set_defaults(fn=cmd_train)
     bp = sub.add_parser("bench", help="run searchers on an IsoBench split, kernel-check, summarize")
     bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v2")
     bp.add_argument("--split", default="test_id")
