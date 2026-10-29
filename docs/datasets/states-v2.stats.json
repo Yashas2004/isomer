@@ -1,0 +1,75 @@
+{
+  "by_theory_dist": {
+    "train": {
+      "bool|0": 14446,
+      "bool|1": 17720,
+      "bool|2": 102707,
+      "bool|3": 77829,
+      "bool|4": 45570,
+      "bool|5": 16947,
+      "group|0": 14822,
+      "group|1": 22203,
+      "group|2": 106570,
+      "group|3": 77284,
+      "group|4": 42044,
+      "group|5": 12930
+    },
+    "val": {
+      "bool|0": 741,
+      "bool|1": 892,
+      "bool|2": 5284,
+      "bool|3": 4068,
+      "bool|4": 2391,
+      "bool|5": 915,
+      "group|0": 806,
+      "group|1": 1214,
+      "group|2": 5753,
+      "group|3": 4172,
+      "group|4": 2230,
+      "group|5": 677
+    }
+  },
+  "config": {
+    "budget": 3000,
+    "data": "data/isobench-v2",
+    "limit": null,
+    "offpath": 6,
+    "out": "data/states-v2",
+    "val_fraction": 0.05
+  },
+  "counts": {
+    "train": 551072,
+    "val": 29143
+  },
+  "dropped": {
+    "bfs_budget": 7,
+    "no_offpath_candidates": 420
+  },
+  "format": "isomer-states/1",
+  "max_tokens": 126,
+  "on_off_path": {
+    "train": {
+      "off_path": 444009,
+      "on_path": 107063
+    },
+    "val": {
+      "off_path": 23452,
+      "on_path": 5691
+    }
+  },
+  "problems": {
+    "train": 29268,
+    "val": 1547
+  },
+  "seconds": {
+    "per_problem_max": 39.914,
+    "per_problem_mean": 0.2656,
+    "total": 1049.5
+  },
+  "source": {
+    "format": "isobench/2",
+    "max_size_slack": 6,
+    "pool_max_size": 3,
+    "train_sha256": "45cb366b9694ab2cb4392aea2f0719dd92ecf110de10bcb2596f19c2c720f9d5"
+  }
+}
