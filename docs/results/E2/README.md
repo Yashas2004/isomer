@@ -35,7 +35,7 @@ On test_depth (shortest proofs of 5–10 steps), best-first search guided by the
 | test_id | neural-w1 | 97.7 | 98.7 | 99.7 | 100 |
 | test_id | symbol_bag-w1 | 93.0 | 96.0 | 98.0 | 100 (296) |
 
-Rates at 10–30 s are over different, partly censored subsets and are not comparable across methods; only the paired tests (problems uncensored for both) are. On test_theory, symbol_bag-w1 is significantly better than neural-w1 at every time limit, and bfs-fwd at 1–10 s (not at 30 s: 1/7 on 193 pairs, Holm p 0.070) (vs symbol_bag at 1 s: 6/64, Holm p 2.0e-12): without a search advantage, the neural heuristic's higher per-expansion cost makes it slower. On test_id neural-w1 is better than symbol_bag at 1 s (18/4, Holm p 0.030) and not significantly different at 3 s or more.
+Rates at 10–30 s are over different, partly censored subsets and are not comparable across methods; only the paired tests (problems uncensored for both) are. On test_theory, symbol_bag-w1 is significantly better than neural-w1 at every time limit, and bfs-fwd at 1–10 s (not at 30 s: 1/7 on 193 pairs, Holm p 0.070; vs symbol_bag at 1 s: 6/64, Holm p 2.0e-12): without a search advantage, the neural heuristic's higher per-expansion cost makes it slower. On test_id neural-w1 is better than symbol_bag at 1 s (18/4, Holm p 0.030) and not significantly different at 3 s or more.
 
 ## Secondary analyses
 - Depth (test_depth, budget 1000), neural-w1 / symbol_bag-w1 solved by true distance: dist 5: 69/70 vs 38/70; 6: 86/97 vs 16/97; 7: 41/58 vs 4/58; 8: 24/52 vs 1/52; 9: 3/19 vs 1/19; 10: 1/4 vs 0/4. The model was trained on distances up to 4 (training states up to 5); performance extrapolates but decays with depth.
