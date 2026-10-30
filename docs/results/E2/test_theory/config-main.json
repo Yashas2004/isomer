@@ -1,0 +1,63 @@
+{
+  "argv": [
+    "C:\\Users\\Yashas\\isomer\\src\\isomer\\__main__.py",
+    "bench",
+    "--data",
+    "data/isobench-v2",
+    "--split",
+    "test_theory",
+    "--ids",
+    "docs/experiments/E2/ids-test_theory.txt",
+    "--methods",
+    "bfs-fwd,bfs-bidir,bestfirst-symbol_bag-w1,neural-w1@runs/h-v1/best.pt#bf16-fast",
+    "--budgets",
+    "30,100,300,1000",
+    "--workers",
+    "2",
+    "--out",
+    "runs/E2-test_theory"
+  ],
+  "budget": {
+    "max_expansions": 1000,
+    "max_nodes": null,
+    "max_seconds": null,
+    "max_size_slack": 6,
+    "pool_max_size": 3,
+    "track_state_tokens": true
+  },
+  "budgets": [
+    30,
+    100,
+    300,
+    1000
+  ],
+  "checkpoints": {
+    "neural-w1@runs/h-v1/best.pt#bf16-fast": {
+      "path": "runs/h-v1/best.pt",
+      "precision": "bf16-fast",
+      "sha256": "928015f6250a8531e6249e799507d4ca8bd433e50e28b7639aae6fa885376c00"
+    }
+  },
+  "circularity_warning": false,
+  "cpu_count": 16,
+  "data": "data/isobench-v2",
+  "dataset_format": "isobench/2",
+  "git_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+  "git_dirty": false,
+  "ids_file": "docs/experiments/E2/ids-test_theory.txt",
+  "ids_sha256": "c32f15d9797868855312ea4e48990fd9f21cf0545e5d05d9d243948dce335d24",
+  "label_budget": 20000,
+  "limit": null,
+  "methods": [
+    "bfs-fwd",
+    "bfs-bidir",
+    "bestfirst-symbol_bag-w1",
+    "neural-w1@runs/h-v1/best.pt#bf16-fast"
+  ],
+  "n_problems": 300,
+  "platform": "Windows-10-10.0.26300-SP0",
+  "python": "3.10.11",
+  "split": "test_theory",
+  "timestamp_utc": "2026-10-30T10:02:50+00:00",
+  "workers": 2
+}

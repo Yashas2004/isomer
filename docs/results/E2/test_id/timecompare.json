@@ -1,0 +1,277 @@
+{
+  "agreement": "OK: 300 problems x 4 budgets (30, 100, 300, 1000) x 2 baselines agree (cell; proof, proof_len, expansions when solved)",
+  "censor_points": {
+    "bestfirst-symbol_bag-w1": 11.4182,
+    "bfs-fwd": 10.9821,
+    "neural-w1": null
+  },
+  "header": {
+    "cpu_count": 16,
+    "main_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "main_dir": "runs/E2-test_id",
+    "main_dirty": false,
+    "main_max_budget": 1000,
+    "main_workers": 2,
+    "neural_device": "cuda",
+    "neural_method": "neural-w1@runs/h-v1/best.pt#bf16-fast",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python": "3.10.11",
+    "split": "test_id",
+    "time_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "time_dir": "runs/E2time-test_id",
+    "time_dirty": false,
+    "time_max_budget": 10000,
+    "time_max_nodes": 1500000,
+    "time_platform": "Windows-10-10.0.26300-SP0",
+    "time_workers": 4
+  },
+  "mcnemar": [
+    {
+      "T": 1.0,
+      "a": 18,
+      "b": 4,
+      "method": "neural-w1",
+      "p": 0.004343509674072266,
+      "p_holm": 0.03040456771850586,
+      "pairs": 300,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 3.0,
+      "a": 11,
+      "b": 3,
+      "method": "neural-w1",
+      "p": 0.057373046875,
+      "p_holm": 0.286865234375,
+      "pairs": 300,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 10.0,
+      "a": 6,
+      "b": 1,
+      "method": "neural-w1",
+      "p": 0.125,
+      "p_holm": 0.5,
+      "pairs": 300,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 30.0,
+      "a": 0,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 1.0,
+      "p_holm": 1.0,
+      "pairs": 296,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 1.0,
+      "a": 20,
+      "b": 3,
+      "method": "neural-w1",
+      "p": 0.00048828125,
+      "p_holm": 0.00390625,
+      "pairs": 300,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 3.0,
+      "a": 13,
+      "b": 2,
+      "method": "neural-w1",
+      "p": 0.00738525390625,
+      "p_holm": 0.0443115234375,
+      "pairs": 300,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 10.0,
+      "a": 6,
+      "b": 1,
+      "method": "neural-w1",
+      "p": 0.125,
+      "p_holm": 0.5,
+      "pairs": 300,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 30.0,
+      "a": 0,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 1.0,
+      "p_holm": 1.0,
+      "pairs": 296,
+      "reference": "bfs-fwd"
+    }
+  ],
+  "state_budget": 1000,
+  "state_length": [
+    {
+      "ci_hi": 1.0,
+      "ci_lo": 0.9873570287754538,
+      "group": "<= 126",
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 1.0,
+      "solved": 300
+    },
+    {
+      "ci_hi": 1.0,
+      "ci_lo": 0.0,
+      "group": "> 126",
+      "method": "neural-w1",
+      "n": 0,
+      "rate": null,
+      "solved": 0
+    },
+    {
+      "ci_hi": 0.9537630551728237,
+      "ci_lo": 0.8953639895740667,
+      "group": "<= 126",
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.93,
+      "solved": 279
+    },
+    {
+      "ci_hi": 1.0,
+      "ci_lo": 0.0,
+      "group": "> 126",
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 0,
+      "rate": null,
+      "solved": 0
+    }
+  ],
+  "time_limits": [
+    1.0,
+    3.0,
+    10.0,
+    30.0
+  ],
+  "time_table": [
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.9886523397008747,
+      "ci_lo": 0.9526280277317246,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.9766666666666667,
+      "solved": 293
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.9948030382606411,
+      "ci_lo": 0.9662244697474675,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.9866666666666667,
+      "solved": 296
+    },
+    {
+      "T": 10.0,
+      "censored": 0,
+      "ci_hi": 0.9994113422781488,
+      "ci_lo": 0.9813633063054688,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.9966666666666667,
+      "solved": 299
+    },
+    {
+      "T": 30.0,
+      "censored": 0,
+      "ci_hi": 1.0,
+      "ci_lo": 0.9873570287754538,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 1.0,
+      "solved": 300
+    },
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.9537630551728237,
+      "ci_lo": 0.8953639895740667,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.93,
+      "solved": 279
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.9769726785120576,
+      "ci_lo": 0.9313957879613599,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.96,
+      "solved": 288
+    },
+    {
+      "T": 10.0,
+      "censored": 0,
+      "ci_hi": 0.9908023684422963,
+      "ci_lo": 0.9570603791821394,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.98,
+      "solved": 294
+    },
+    {
+      "T": 30.0,
+      "censored": 4,
+      "ci_hi": 1.0,
+      "ci_lo": 0.9871883666928419,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 296,
+      "rate": 1.0,
+      "solved": 296
+    },
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.9456531446048553,
+      "ci_lo": 0.8837267595665261,
+      "method": "bfs-fwd",
+      "n": 300,
+      "rate": 0.92,
+      "solved": 276
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.9694683593706526,
+      "ci_lo": 0.9191529665272558,
+      "method": "bfs-fwd",
+      "n": 300,
+      "rate": 0.95,
+      "solved": 285
+    },
+    {
+      "T": 10.0,
+      "censored": 0,
+      "ci_hi": 0.9908023684422963,
+      "ci_lo": 0.9570603791821394,
+      "method": "bfs-fwd",
+      "n": 300,
+      "rate": 0.98,
+      "solved": 294
+    },
+    {
+      "T": 30.0,
+      "censored": 4,
+      "ci_hi": 1.0,
+      "ci_lo": 0.9871883666928419,
+      "method": "bfs-fwd",
+      "n": 296,
+      "rate": 1.0,
+      "solved": 296
+    }
+  ]
+}

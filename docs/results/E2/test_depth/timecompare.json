@@ -1,0 +1,277 @@
+{
+  "agreement": "OK: 300 problems x 4 budgets (30, 100, 300, 1000) x 2 baselines agree (cell; proof, proof_len, expansions when solved)",
+  "censor_points": {
+    "bestfirst-symbol_bag-w1": 6.7396,
+    "bfs-fwd": 3.8103,
+    "neural-w1": 13.5016
+  },
+  "header": {
+    "cpu_count": 16,
+    "main_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "main_dir": "runs/E2-test_depth",
+    "main_dirty": false,
+    "main_max_budget": 1000,
+    "main_workers": 2,
+    "neural_device": "cuda",
+    "neural_method": "neural-w1@runs/h-v1/best.pt#bf16-fast",
+    "platform": "Windows-10-10.0.26300-SP0",
+    "python": "3.10.11",
+    "split": "test_depth",
+    "time_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "time_dir": "runs/E2time-test_depth",
+    "time_dirty": false,
+    "time_max_budget": 10000,
+    "time_max_nodes": 1500000,
+    "time_platform": "Windows-10-10.0.26300-SP0",
+    "time_workers": 4
+  },
+  "mcnemar": [
+    {
+      "T": 1.0,
+      "a": 103,
+      "b": 6,
+      "method": "neural-w1",
+      "p": 6.61789839683711e-24,
+      "p_holm": 2.647159358734844e-23,
+      "pairs": 300,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 3.0,
+      "a": 107,
+      "b": 4,
+      "method": "neural-w1",
+      "p": 4.789431089465355e-27,
+      "p_holm": 2.3947155447326775e-26,
+      "pairs": 300,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 10.0,
+      "a": 104,
+      "b": 1,
+      "method": "neural-w1",
+      "p": 5.226203497089203e-30,
+      "p_holm": 3.135722098253522e-29,
+      "pairs": 294,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 30.0,
+      "a": 51,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 8.881784197001252e-16,
+      "p_holm": 2.6645352591003757e-15,
+      "pairs": 183,
+      "reference": "bestfirst-symbol_bag-w1"
+    },
+    {
+      "T": 1.0,
+      "a": 113,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 1.925929944387236e-34,
+      "p_holm": 1.3481509610710651e-33,
+      "pairs": 300,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 3.0,
+      "a": 125,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 4.70197740328915e-38,
+      "p_holm": 3.76158192263132e-37,
+      "pairs": 300,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 10.0,
+      "a": 22,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 4.76837158203125e-07,
+      "p_holm": 9.5367431640625e-07,
+      "pairs": 103,
+      "reference": "bfs-fwd"
+    },
+    {
+      "T": 30.0,
+      "a": 0,
+      "b": 0,
+      "method": "neural-w1",
+      "p": 1.0,
+      "p_holm": 1.0,
+      "pairs": 68,
+      "reference": "bfs-fwd"
+    }
+  ],
+  "state_budget": 1000,
+  "state_length": [
+    {
+      "ci_hi": 0.8070151800072419,
+      "ci_lo": 0.7100384249870538,
+      "group": "<= 126",
+      "method": "neural-w1",
+      "n": 294,
+      "rate": 0.7619047619047619,
+      "solved": 224
+    },
+    {
+      "ci_hi": 0.3903342879021653,
+      "ci_lo": 0.0,
+      "group": "> 126",
+      "method": "neural-w1",
+      "n": 6,
+      "rate": 0.0,
+      "solved": 0
+    },
+    {
+      "ci_hi": 0.2538282805975165,
+      "ci_lo": 0.16196829557775974,
+      "group": "<= 126",
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 294,
+      "rate": 0.20408163265306123,
+      "solved": 60
+    },
+    {
+      "ci_hi": 0.3903342879021653,
+      "ci_lo": 0.0,
+      "group": "> 126",
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 6,
+      "rate": 0.0,
+      "solved": 0
+    }
+  ],
+  "time_limits": [
+    1.0,
+    3.0,
+    10.0,
+    30.0
+  ],
+  "time_table": [
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.5595104403998036,
+      "ci_lo": 0.44707193979203275,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.5033333333333333,
+      "solved": 151
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.6602608948541061,
+      "ci_lo": 0.5503752712846574,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.6066666666666667,
+      "solved": 182
+    },
+    {
+      "T": 10.0,
+      "censored": 0,
+      "ci_hi": 0.7584354538968162,
+      "ci_lo": 0.6562544981888744,
+      "method": "neural-w1",
+      "n": 300,
+      "rate": 0.71,
+      "solved": 213
+    },
+    {
+      "T": 30.0,
+      "censored": 62,
+      "ci_hi": 0.9614374206988507,
+      "ci_lo": 0.8986301666134435,
+      "method": "neural-w1",
+      "n": 238,
+      "rate": 0.9369747899159664,
+      "solved": 223
+    },
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.2274331988870445,
+      "ci_lo": 0.1406583026966649,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.18,
+      "solved": 54
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.3159395034372583,
+      "ci_lo": 0.21671150294236005,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 300,
+      "rate": 0.2633333333333333,
+      "solved": 79
+    },
+    {
+      "T": 10.0,
+      "censored": 6,
+      "ci_hi": 0.4099608746313388,
+      "ci_lo": 0.3012949043978207,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 294,
+      "rate": 0.35374149659863946,
+      "solved": 104
+    },
+    {
+      "T": 30.0,
+      "censored": 79,
+      "ci_hi": 0.6161534963700127,
+      "ci_lo": 0.48614080522648234,
+      "method": "bestfirst-symbol_bag-w1",
+      "n": 221,
+      "rate": 0.5520361990950227,
+      "solved": 122
+    },
+    {
+      "T": 1.0,
+      "censored": 0,
+      "ci_hi": 0.16908117004926165,
+      "ci_lo": 0.09369224846506602,
+      "method": "bfs-fwd",
+      "n": 300,
+      "rate": 0.12666666666666668,
+      "solved": 38
+    },
+    {
+      "T": 3.0,
+      "censored": 0,
+      "ci_hi": 0.23820379182481183,
+      "ci_lo": 0.14963485033440665,
+      "method": "bfs-fwd",
+      "n": 300,
+      "rate": 0.19,
+      "solved": 57
+    },
+    {
+      "T": 10.0,
+      "censored": 197,
+      "ci_hi": 0.7444299148553299,
+      "ci_lo": 0.5644389490131616,
+      "method": "bfs-fwd",
+      "n": 103,
+      "rate": 0.6601941747572816,
+      "solved": 68
+    },
+    {
+      "T": 30.0,
+      "censored": 232,
+      "ci_hi": 1.0,
+      "ci_lo": 0.9465286634799296,
+      "method": "bfs-fwd",
+      "n": 68,
+      "rate": 1.0,
+      "solved": 68
+    }
+  ]
+}
