@@ -55,12 +55,16 @@ from .common import (
     steps_from_parents,
 )
 
-_MODELS: dict[tuple[str, str | None], Any] = {}
+_MODELS: dict[tuple[str, str | None, str], Any] = {}
+
+# Precision suffixes accepted in method names (``neural-w1@CKPT#bf16``); no suffix = fp32.
+NAME_PRECISIONS = ("fp32", "bf16-fast")
+DEFAULT_PRECISION = "fp32"
 
 
-def _load(ckpt: str, device: str | None = None) -> Any:
-    """One ``LearnedHeuristic`` per (checkpoint, device) per process."""
-    key = (ckpt, device)
+def _load(ckpt: str, device: str | None = None, precision: str = DEFAULT_PRECISION) -> Any:
+    """One ``LearnedHeuristic`` per (checkpoint, device, precision) per process."""
+    key = (ckpt, device, precision)
     if key not in _MODELS:
         # Must precede CUDA initialization in this process to take effect.
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
@@ -74,14 +78,14 @@ def _load(ckpt: str, device: str | None = None) -> Any:
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
         dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        _MODELS[key] = LearnedHeuristic(ckpt, device=dev, precision="fp32", batch_size=4096)
+        _MODELS[key] = LearnedHeuristic(ckpt, device=dev, precision=precision, batch_size=4096)
     return _MODELS[key]
 
 
 def neural_best_first(problem: Problem, budget: Budget, ckpt: str, w: float = 1.0, greedy: bool = False,
-                      device: str | None = None) -> SearchResult:
+                      device: str | None = None, precision: str = DEFAULT_PRECISION) -> SearchResult:
     t0 = time.perf_counter()
-    h = _load(ckpt, device)
+    h = _load(ckpt, device, precision)
     rule_list = list(problem.theory.rules().values())
     pool = problem.pool(budget.pool_max_size)
     max_size = size_cap(problem, budget.max_size_slack)
@@ -100,7 +104,8 @@ def neural_best_first(problem: Problem, budget: Budget, ckpt: str, w: float = 1.
 
     def result(stop: str, proof: Proof | None = None) -> SearchResult:
         stats = {"nodes_stored": len(parents), "stop": stop, "model_calls": calls,
-                 "model_seconds": round(model_seconds, 4), "device": h.device.type, "gpu_peak_bytes": None}
+                 "model_seconds": round(model_seconds, 4), "device": h.device.type, "gpu_peak_bytes": None,
+                 "precision": precision}
         if h.device.type == "cuda":
             import torch
             stats["gpu_peak_bytes"] = torch.cuda.max_memory_allocated(h.device)
@@ -141,9 +146,21 @@ def neural_best_first(problem: Problem, budget: Budget, ckpt: str, w: float = 1.
     return result("exhausted")
 
 
-def _make(ckpt: str, w: float, greedy: bool) -> partial:
+def split_precision(arg: str) -> tuple[str, str]:
+    """``CKPT#MODE`` -> (CKPT, MODE); no suffix -> (arg, fp32). Splits on the last '#'."""
+    path, sep, mode = arg.rpartition("#")
+    if not sep:
+        return arg, DEFAULT_PRECISION
+    if mode not in NAME_PRECISIONS:
+        raise KeyError(f"unknown precision suffix #{mode!r} in {arg!r}; valid: "
+                       f"{', '.join('#' + m for m in NAME_PRECISIONS)} (none = #{DEFAULT_PRECISION})")
+    return path, mode
+
+
+def _make(arg: str, w: float, greedy: bool) -> partial:
     """Picklable searcher for one checkpoint. Loads nothing: also used to validate names."""
-    return partial(neural_best_first, ckpt=ckpt, w=w, greedy=greedy)
+    ckpt, precision = split_precision(arg)
+    return partial(neural_best_first, ckpt=ckpt, w=w, greedy=greedy, precision=precision)
 
 
 PARAMETRIC["neural-w1"] = partial(_make, w=1.0, greedy=False)
@@ -157,4 +174,8 @@ def is_neural(method: str) -> bool:
 
 
 def checkpoint_of(method: str) -> str:
-    return method.partition("@")[2]
+    return split_precision(method.partition("@")[2])[0]
+
+
+def precision_of(method: str) -> str:
+    return split_precision(method.partition("@")[2])[1]

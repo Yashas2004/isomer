@@ -108,7 +108,7 @@ def test_tiny_training_run_reduces_loss_and_writes_run(tiny_states, tmp_path):
 def test_learned_heuristic_matches_model_and_caches(tiny_states, tmp_path):
     out = tmp_path / "run"
     train(tiny_cfg(tiny_states, out, max_steps=2), progress=False)
-    h = LearnedHeuristic(str(out / "best.pt"), device="cpu", batch_size=2)
+    h = LearnedHeuristic(str(out / "best.pt"), device="cpu", batch_size=2, precision="fp32")
     goal = parse("e")
     states = [parse(s) for s in ("(* e e)", "(inv e)", "(* a (inv a))", "e")]
     vals = h.h_batch(states, goal)

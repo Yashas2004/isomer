@@ -20,7 +20,7 @@ from isomer.learn.model import DistanceModel, ModelConfig, save_checkpoint
 from isomer.search.best_first import best_first
 from isomer.search.common import Budget, get_searcher
 from isomer.search.heuristics import zero
-from isomer.search.neural import _load, neural_best_first
+from isomer.search.neural import _load, checkpoint_of, neural_best_first, precision_of
 
 REAL_CKPT = Path("runs/h-v1/best.pt")
 DEV = Path("data/isobench-v2-dev")
@@ -65,11 +65,12 @@ def check_determinism_and_prefix(search, probs, big=200):
 
 # ---------------------------------------------------------------- CPU, tiny model
 
-def test_cpu_determinism_and_prefix_property(tiny_ckpt, tiny_data):
-    search = partial(neural_best_first, ckpt=tiny_ckpt, w=1.0, device="cpu")
+@pytest.mark.parametrize("precision", ["fp32", "bf16-fast"])
+def test_cpu_determinism_and_prefix_property(tiny_ckpt, tiny_data, precision):
+    search = partial(neural_best_first, ckpt=tiny_ckpt, w=1.0, device="cpu", precision=precision)
     probs = problems(tiny_data, "train") + problems(tiny_data, "test_theory", 3)
     assert check_determinism_and_prefix(search, probs) > 0
-    greedy = partial(neural_best_first, ckpt=tiny_ckpt, greedy=True, device="cpu")
+    greedy = partial(neural_best_first, ckpt=tiny_ckpt, greedy=True, device="cpu", precision=precision)
     check_determinism_and_prefix(greedy, probs[:5])
 
 
@@ -106,7 +107,18 @@ def test_constant_scores_reproduce_uniform_cost_search(tiny_ckpt, tiny_data, mon
 
 def test_method_names():
     s = get_searcher("neural-w3@some/dir/x.pt")
-    assert s.func is neural_best_first and s.keywords == {"ckpt": "some/dir/x.pt", "w": 3.0, "greedy": False}
+    assert s.func is neural_best_first and s.keywords == {"ckpt": "some/dir/x.pt", "w": 3.0, "greedy": False,
+                                                          "precision": "fp32"}
+    # explicit default suffix == no suffix; unknown suffixes are refused; the path is stripped
+    assert get_searcher("neural-w3@some/dir/x.pt#fp32").keywords == s.keywords
+    with pytest.raises(KeyError, match="precision suffix"):
+        get_searcher("neural-w1@x.pt#fp8")
+    with pytest.raises(KeyError, match="precision suffix"):
+        get_searcher("neural-w1@x.pt#bf16")      # a LearnedHeuristic mode, not offered for search
+    fast = get_searcher("neural-w1@some/dir/x.pt#bf16-fast")
+    assert fast.keywords["precision"] == "bf16-fast" and fast.keywords["ckpt"] == "some/dir/x.pt"
+    assert precision_of("neural-greedy@x.pt#bf16-fast") == "bf16-fast"
+    assert checkpoint_of("neural-w1@a/b.pt#fp32") == "a/b.pt" and precision_of("neural-w1@a/b.pt") == "fp32"
     assert get_searcher("neural-greedy@x.pt").keywords["greedy"] is True
     assert get_searcher("bfs-fwd") is not None
     for bad in ("neural-w2@x.pt", "neural-w1@", "neural-w1", "nope"):
@@ -114,19 +126,21 @@ def test_method_names():
             get_searcher(bad)
 
 
-def test_bench_with_neural_method(tiny_ckpt, tiny_data, tmp_path):
-    method = f"neural-greedy@{tiny_ckpt}"
+@pytest.mark.parametrize("precision", ["fp32", "bf16-fast"])
+def test_bench_with_neural_method(tiny_ckpt, tiny_data, tmp_path, precision):
+    method = f"neural-greedy@{tiny_ckpt}" + ("" if precision == "fp32" else f"#{precision}")
     out = tmp_path / "run"
     code = run(BenchConfig(data=str(tiny_data), split="test_theory", methods=["bfs-fwd", method],
                            budgets=[10, 100], out=str(out), workers=1))
     assert code == 0
     cfg = json.loads((out / "config.json").read_text(encoding="utf-8"))
     import hashlib
-    assert cfg["checkpoints"] == {method: {"path": tiny_ckpt,
+    assert cfg["checkpoints"] == {method: {"path": tiny_ckpt, "precision": precision,
                                            "sha256": hashlib.sha256(Path(tiny_ckpt).read_bytes()).hexdigest()}}
     rows = [json.loads(line) for line in (out / "results.jsonl").read_text(encoding="utf-8").splitlines()]
     neural = [r for r in rows if r["method"] == method]
-    assert neural and all(r["model_calls"] >= 1 and r["status"] == "ok" for r in neural)
+    assert neural and all(r["model_calls"] >= 1 and r["status"] == "ok" and r["precision"] == precision
+                          for r in neural)
     assert all("model_calls" not in r for r in rows if r["method"] == "bfs-fwd")
     with pytest.raises(BenchError, match="not found"):
         run(BenchConfig(data=str(tiny_data), split="test_theory", methods=["neural-w1@missing.pt"],
@@ -138,8 +152,9 @@ def test_bench_with_neural_method(tiny_ckpt, tiny_data, tmp_path):
 @pytest.mark.skipif(not torch.cuda.is_available() or not REAL_CKPT.is_file()
                     or not (DEV / "test_depth.jsonl").is_file(),
                     reason="needs CUDA, runs/h-v1/best.pt and data/isobench-v2-dev")
-def test_cuda_determinism_and_prefix_property_on_dev():
-    search = partial(neural_best_first, ckpt=str(REAL_CKPT), w=1.0, device="cuda")
+@pytest.mark.parametrize("precision", ["fp32", "bf16-fast"])
+def test_cuda_determinism_and_prefix_property_on_dev(precision):
+    search = partial(neural_best_first, ckpt=str(REAL_CKPT), w=1.0, device="cuda", precision=precision)
     probs = problems(DEV, "test_depth", 10)
     assert len(probs) == 10
     check_determinism_and_prefix(search, probs, big=300)

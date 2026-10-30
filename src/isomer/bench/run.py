@@ -59,10 +59,10 @@ from ..core import kernel
 from ..core.proof import Problem, Proof
 from ..core.theories import THEORIES
 from ..search.common import Budget, SearchResult, get_searcher
-from ..search.neural import checkpoint_of, is_neural
+from ..search.neural import checkpoint_of, is_neural, precision_of
 
 # Optional per-row stats, copied from SearchResult.stats when a searcher reports them.
-EXTRA_STATS = ("model_calls", "model_seconds", "device", "gpu_peak_bytes")
+EXTRA_STATS = ("model_calls", "model_seconds", "device", "gpu_peak_bytes", "precision")
 NEURAL_DEFAULT_WORKERS = 2
 
 
@@ -285,7 +285,7 @@ def _config_json(cfg: BenchConfig, budget: Budget, n_problems: int, workers: int
         "workers": workers,
         "n_problems": n_problems,
         "dataset_format": fmt,
-        "checkpoints": {m: {"path": checkpoint_of(m),
+        "checkpoints": {m: {"path": checkpoint_of(m), "precision": precision_of(m),
                             "sha256": hashlib.sha256(Path(checkpoint_of(m)).read_bytes()).hexdigest()}
                         for m in cfg.methods if is_neural(m)},
     }

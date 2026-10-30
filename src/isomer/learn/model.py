@@ -16,10 +16,19 @@ Input is ``[CLS] state [SEP] goal [SEP]`` (``tokenizer.encode``). Design choices
 * **Unclamped scalar head** on [CLS], computed in fp32. Deeper test
   problems need predictions above the training maximum. Keeping the head
   fp32 avoids spurious ties from bf16 rounding when siblings are ranked.
+
+**Fast inference path** (``forward_fast``, ``make_fast_copy``; used only by
+``LearnedHeuristic(precision="bf16-fast")``). The same weights, cast to bf16,
+run with no fp32 round-trips inside the blocks. RoPE tables are precomputed
+once (non-persistent buffers, so checkpoints are unchanged) and the rotation
+is done in bf16. RMSNorm uses ``F.rms_norm`` where available. Only the final
+norm and the head compute in fp32. Training and ``forward`` are untouched: the
+fp32 outputs are pinned bit for bit by ``tests/test_golden.py``.
 """
 
 from __future__ import annotations
 
+import copy
 import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -80,6 +89,19 @@ def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.T
     return (xf * cos + rot * sin).to(x.dtype)
 
 
+def apply_rope_fast(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    """``apply_rope`` in x's own dtype (no fp32 round-trip); cos/sin already in that dtype."""
+    x1, x2 = x.chunk(2, dim=-1)
+    return x * cos + torch.cat([-x2, x1], dim=-1) * sin
+
+
+def rms_norm_fast(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+    """RMSNorm in x's dtype: the fused ``F.rms_norm`` (torch >= 2.4) when available."""
+    if hasattr(F, "rms_norm"):
+        return F.rms_norm(x, (x.shape[-1],), weight, eps)
+    return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps) * weight
+
+
 class Attention(nn.Module):
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__()
@@ -92,6 +114,13 @@ class Attention(nn.Module):
         b, n, d = x.shape
         q, k, v = self.qkv(x).view(b, n, 3, self.n_heads, d // self.n_heads).permute(2, 0, 3, 1, 4)
         q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
+        y = F.scaled_dot_product_attention(q, k, v, attn_mask=keep[:, None, None, :])
+        return self.out(y.transpose(1, 2).reshape(b, n, d))
+
+    def forward_fast(self, x: torch.Tensor, keep: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        b, n, d = x.shape
+        q, k, v = self.qkv(x).view(b, n, 3, self.n_heads, d // self.n_heads).permute(2, 0, 3, 1, 4)
+        q, k = apply_rope_fast(q, cos, sin), apply_rope_fast(k, cos, sin)
         y = F.scaled_dot_product_attention(q, k, v, attn_mask=keep[:, None, None, :])
         return self.out(y.transpose(1, 2).reshape(b, n, d))
 
@@ -117,6 +146,10 @@ class Block(nn.Module):
         x = x + self.attn(self.norm1(x), keep, cos, sin)
         return x + self.ffn(self.norm2(x))
 
+    def forward_fast(self, x: torch.Tensor, keep: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn.forward_fast(rms_norm_fast(x, self.norm1.weight, self.norm1.eps), keep, cos, sin)
+        return x + self.ffn(rms_norm_fast(x, self.norm2.weight, self.norm2.eps))
+
 
 def segment_ids(ids: torch.Tensor) -> torch.Tensor:
     """0 up to and including the first [SEP], 1 after it."""
@@ -137,6 +170,11 @@ class DistanceModel(nn.Module):
         for blk in self.blocks:  # residual-branch outputs scaled down with depth (GPT-2 style)
             for w in (blk.attn.out.weight, blk.ffn.w2.weight):
                 nn.init.normal_(w, std=0.02 / math.sqrt(2 * cfg.n_layers))
+        # Fast path only: precomputed RoPE tables (fp32, not saved in checkpoints).
+        cos, sin = rope_tables(cfg.max_len, cfg.d_model // cfg.n_heads, cfg.rope_base, torch.device("cpu"))
+        self.register_buffer("rope_cos", cos, persistent=False)
+        self.register_buffer("rope_sin", sin, persistent=False)
+        self._rope_cast: dict[tuple[str, torch.dtype], tuple[torch.Tensor, torch.Tensor]] = {}
 
     @staticmethod
     def _init(m: nn.Module) -> None:
@@ -156,6 +194,32 @@ class DistanceModel(nn.Module):
             x = blk(x, keep, cos, sin)
         with torch.autocast(device_type=ids.device.type, enabled=False):
             return self.head(self.norm(x[:, 0].float())).squeeze(-1)
+
+    def forward_fast(self, ids: torch.Tensor) -> torch.Tensor:
+        """Inference only, on a ``make_fast_copy`` model: blocks in the
+        embeddings' dtype (bf16), final norm and head in fp32. Run without autocast."""
+        if ids.shape[1] > self.cfg.max_len:
+            raise ValueError(f"sequence length {ids.shape[1]} > max_len {self.cfg.max_len}")
+        keep = ids != PAD_ID
+        dtype = self.tok_emb.weight.dtype
+        key = (str(self.rope_cos.device), dtype)
+        if key not in self._rope_cast:
+            self._rope_cast[key] = (self.rope_cos.to(dtype), self.rope_sin.to(dtype))
+        cos, sin = (t[:ids.shape[1]] for t in self._rope_cast[key])
+        x = self.tok_emb(ids) + self.seg_emb(segment_ids(ids))
+        for blk in self.blocks:
+            x = blk.forward_fast(x, keep, cos, sin)
+        return self.head(self.norm(x[:, 0].float())).squeeze(-1)
+
+
+def make_fast_copy(model: DistanceModel, dtype: torch.dtype = torch.bfloat16) -> DistanceModel:
+    """A copy for ``forward_fast``: embeddings and blocks in ``dtype``, final
+    norm and head (and the RoPE buffers) left in fp32. The original is untouched."""
+    fast = copy.deepcopy(model)
+    fast._rope_cast = {}
+    for m in (fast.tok_emb, fast.seg_emb, fast.blocks):
+        m.to(dtype)
+    return fast.eval()
 
 
 def n_params(model: nn.Module) -> int:
