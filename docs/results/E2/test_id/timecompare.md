@@ -1,7 +1,7 @@
 # Equal-time comparison: test_id
 
-- main run (neural): `runs/E2-test_id`, commit `ccc97a542f1204e4951cb5a19468f9341ac9a7df`, 2 workers, device `cuda`, max budget 1000
-- time run (baselines): `runs/E2time-test_id`, commit `ccc97a542f1204e4951cb5a19468f9341ac9a7df`, 4 workers, max budget 10000, max nodes 1500000
+- main run (neural): `runs/E2-test_id`, commit `497f19ff91d3183cdc93ab623806dce5180a1e1f`, 2 workers, device `cuda`, max budget 1000
+- time run (baselines): `runs/E2time-test_id`, commit `497f19ff91d3183cdc93ab623806dce5180a1e1f`, 4 workers, max budget 10000, max nodes 1500000
 - hardware (config.json): `Windows-10-10.0.26300-SP0`, 16 logical CPUs, Python 3.10.11; the GPU model is not recorded in config.json
 - **Times are machine-dependent and measured under different worker counts** (neural: 2 workers sharing one GPU; baselines: 4 CPU workers).
 - Neural seconds include, for the first problem in each worker process, loading the model and starting CUDA (the searcher's clock starts before the load): at most 2 neural rows are inflated, against neural; the logs do not say which.

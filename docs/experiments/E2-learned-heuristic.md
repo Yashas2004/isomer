@@ -1,6 +1,6 @@
 # E2 — Learned distance heuristic vs non-neural baselines on IsoBench v2
 
-Status: plan frozen before any search on v2 test splits (2026-10-30). Results go in docs/results/E2/. (Written at commit 687fa2f8d195e47429e36cd42d5fef383aabddf1.)
+Status: plan frozen before any search on v2 test splits (2026-10-30). Results go in docs/results/E2/. (Written at commit b5704cd0b15c5e18bef7e37c38612b8843110558.)
 
 ## Questions
 1. Does best-first search guided by the learned heuristic (h-v1) solve significantly more problems than the same search guided by symbol_bag, at equal expansion budgets?

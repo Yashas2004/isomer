@@ -4,7 +4,7 @@
 - methods: `bestfirst-size_diff-w1`, `bestfirst-size_diff-w3`, `bestfirst-symbol_bag-w1`, `bestfirst-symbol_bag-w3`, `bfs-bidir`, `bfs-fwd`
 - budgets (node expansions): 100, 300, 1000, 3000
 - dataset format: `isobench/1`
-- git commit: `3ecea43b650b4310488124cd21b0e35e7b16abbc`
+- git commit: `d6394351ffb69ac1f234885dc9b56953d52237ab`
 - smaller budgets are derived from one run at the largest budget (prefix property; see `isomer.search.common`). Solved = accepted by the trusted kernel.
 
 ## Solve rate

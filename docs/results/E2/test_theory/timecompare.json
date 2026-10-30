@@ -7,7 +7,7 @@
   },
   "header": {
     "cpu_count": 16,
-    "main_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "main_commit": "497f19ff91d3183cdc93ab623806dce5180a1e1f",
     "main_dir": "runs/E2-test_theory",
     "main_dirty": false,
     "main_max_budget": 1000,
@@ -17,7 +17,7 @@
     "platform": "Windows-10-10.0.26300-SP0",
     "python": "3.10.11",
     "split": "test_theory",
-    "time_commit": "ccc97a542f1204e4951cb5a19468f9341ac9a7df",
+    "time_commit": "497f19ff91d3183cdc93ab623806dce5180a1e1f",
     "time_dir": "runs/E2time-test_theory",
     "time_dirty": false,
     "time_max_budget": 10000,

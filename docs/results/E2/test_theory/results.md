@@ -4,7 +4,7 @@
 - methods: `bestfirst-symbol_bag-w1`, `bfs-bidir`, `bfs-fwd`, `neural-w1@runs/h-v1/best.pt#bf16-fast`
 - budgets (node expansions): 30, 100, 300, 1000
 - dataset format: `isobench/2`
-- git commit: `ccc97a542f1204e4951cb5a19468f9341ac9a7df`
+- git commit: `497f19ff91d3183cdc93ab623806dce5180a1e1f`
 - smaller budgets are derived from one run at the largest budget (prefix property; see `isomer.search.common`). Solved = accepted by the trusted kernel.
 
 ## Solve rate

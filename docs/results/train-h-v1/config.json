@@ -57,7 +57,7 @@
     "val_states": 29143
   },
   "deterministic": "seeded; CUDA kernels are not bit-deterministic, GPU runs repeat only statistically",
-  "git_commit": "0e4c535291c88feb8ccd18aa8638d692a1dfc5cc",
+  "git_commit": "7aa6d8b4a630a2409dec4c884a4e67009a90789a",
   "git_dirty": false,
   "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
   "model": {

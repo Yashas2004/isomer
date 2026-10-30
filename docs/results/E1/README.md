@@ -1,6 +1,6 @@
 # E1 results — non-neural baselines on IsoBench v1
 
-Plan: docs/experiments/E1-baselines.md (pre-registered 2026-10-28). Commit: `3ecea43`. All runs clean (git_dirty false), 0 errors, 0 unsound proofs, 0 censored cells.
+Plan: docs/experiments/E1-baselines.md (pre-registered 2026-10-28). Commit: `d639435`. All runs clean (git_dirty false), 0 errors, 0 unsound proofs, 0 censored cells.
 
 ## Deviations from the plan
 1. Data version. The plan named IsoBench v0. v0 labels used an asymmetric action space (ADR-003), so E1 was re-run on IsoBench v1. v0 results are archived in docs/results/E1-v0/. Method comparisons were nearly identical on v0 and v1 (e.g. symbol_bag-w1 test_depth 37.4% -> 34.0%, bfs-fwd 17.6% -> 16.6%).

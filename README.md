@@ -212,7 +212,7 @@ Measured E2 wall time per split (elapsed time printed by bench at 100%):
 
 - **Kernel gate.** The benchmark runner rebuilds each certificate from the dataset record's own goal and runs the kernel on it. A rejected proof makes the run fail loudly; it is never silently counted.
 - **No circular labels.** The evaluation labels come from a 20× larger budget than any benchmark run; the runner warns when a budget comes within 10× of the labelling budget.
-- **Frozen before testing.** Questions, predictions, analysis and problem ids were committed before any search on the test splits (E2 plan at commit `39b9aea`).
+- **Frozen before testing.** Questions, predictions, analysis and problem ids were committed before any search on the test splits (E2 plan at commit `cd3d517`).
 - **Paired statistics.** Exact McNemar tests with Holm correction; the optimality gap is computed only on problems that every method solved.
 - **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 225 tests, and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
 

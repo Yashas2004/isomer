@@ -30,7 +30,7 @@
   "cpu_count": 16,
   "data": "data/isobench-v1",
   "dataset_format": "isobench/1",
-  "git_commit": "3ecea43b650b4310488124cd21b0e35e7b16abbc",
+  "git_commit": "d6394351ffb69ac1f234885dc9b56953d52237ab",
   "git_dirty": false,
   "limit": null,
   "methods": [

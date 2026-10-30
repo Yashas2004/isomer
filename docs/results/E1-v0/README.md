@@ -3,7 +3,7 @@
 These are the results of experiment E1 (`docs/experiments/E1-baselines.md`) on
 **IsoBench v0** (`isobench/0`). Each run's git commit, machine and settings are
 recorded in its config file (`config-<split>.json`). All three runs were made
-from commit `3266f43` with a clean tree (`git_dirty: false`).
+from commit `985d4dd` with a clean tree (`git_dirty: false`).
 
 **They are superseded.** The v0 labels were computed in an asymmetric action
 space: fresh-variable values came from the current term's subterms, while
