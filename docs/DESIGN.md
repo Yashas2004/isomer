@@ -50,9 +50,16 @@ Why this domain (rather than copying a Lean 4 prover):
   does RL/ML/LLM-guided rule selection (Omelette, MCTS-EqSat, Aurora, ML-guided
   EqSat, LGuess, CERES); we compare against that style fairly, on *proving*
   rather than optimisation.
-* **RQ3 — Depth extrapolation.** Train on proofs of length ≤ 8, test on
-  12/16/24. Which design choices help: tree-positional encodings vs flat
-  RoPE, value head, expert iteration?
+  *Status:* not done. Neither guided saturation nor the e-graph baseline is
+  implemented yet, so RQ1 has so far been tested only against BFS and
+  best-first search (E1, E2), not against equality saturation.
+* **RQ3 — Depth extrapolation.** Train on proofs of length ≤ 4 (training
+  states up to distance 5), test on exact distances 5–10 (test_depth) and
+  certified lower bounds 7–11 (test_deep). Which design choices help:
+  tree-positional encodings vs flat RoPE, value head, expert iteration?
+  *Status:* the extrapolation itself is measured (E2: neural-w1 solves 74.7%
+  of test_depth at 1,000 expansions, decaying with distance; 2/100 on
+  test_deep). The design-choice ablations have not been run.
 * **RQ4 — Self-improvement.** Does expert iteration (train on your own found
   proofs, re-verified by the kernel) push the solved frontier outward, and
   where does it plateau?
@@ -104,6 +111,11 @@ Principles:
 
 ## 5. Model (fits a 4 GB RTX 3050)
 
+*As built (h-v1):* the model differs from this plan. It has 6 layers, d=256
+and 4.7M parameters, uses RoPE, has a distance head only (no policy head) and
+takes at most 192 tokens. See docs/results/train-h-v1. The plan below is kept
+as originally written.
+
 * Tokens: S-expression symbols (`(`, `)`, operators, constants). Input =
   `[current term] <sep> [goal term]`, max 256 tokens.
 * Encoder: 6–8 layers, d=384, RMSNorm, SwiGLU, ~10–15M params, bf16.
@@ -131,18 +143,20 @@ Principles:
 
 ## 7. Roadmap (≈10–12 weeks at 12–15 h/week)
 
-| Phase | Deliverable | Exit criterion |
-|---|---|---|
-| 0 Setup | repo, CUDA env, CI, `doctor` | `pytest` green, GPU visible |
-| 1 Core | terms, rewriting, kernel, certificates, generator v0 | differential tests pass ✅ (done) |
-| 1b Data | generator v1 (BFS shortest length, dedup, splits), 2 more theories | IsoBench v0 frozen with a datasheet ✅ (code done; build locally) |
-| 2 Baselines | BFS, best-first, own e-graph, egglog | first results table + plots |
-| 3 Model | tokenizer, transformer, supervised training | policy top-1 > size heuristic |
-| 4 Search | guided best-first, MCTS, guided saturation | RQ1/RQ2 table |
-| 5 Self-play | expert iteration loop | solved-frontier curve |
-| 6 Generalization | depth/size/theory splits + ablations | RQ3 table |
-| 7 Interp | probes, patching, heuristic distilled from a feature | RQ5 section |
-| 8 Ship | TPTP UEQ eval, write-up (arXiv style), demo, blog | someone else reproduces from README |
+Status (2026-10-30): ✅ done · ◐ partly done · ☐ not started.
+
+| Phase | Deliverable | Exit criterion | Status |
+|---|---|---|---|
+| 0 Setup | repo, CUDA env, CI, `doctor` | `pytest` green, GPU visible | ✅ |
+| 1 Core | terms, rewriting, kernel, certificates, generator v0 | differential tests pass | ✅ |
+| 1b Data | generator v1 (BFS shortest length, dedup, splits), 2 more theories | IsoBench v0 frozen with a datasheet | ✅ (v0 → v1 → v2, ADR-002..004) |
+| 2 Baselines | BFS, best-first, own e-graph, egglog | first results table + plots | ◐ BFS and best-first done (E1); own e-graph and egglog not built |
+| 3 Model | tokenizer, transformer, supervised training | policy top-1 > size heuristic | ✅ as a distance model rather than a policy head: val top-1-optimal 0.952 vs symbol_bag 0.501 (docs/results/train-h-v1) |
+| 4 Search | guided best-first, MCTS, guided saturation | RQ1/RQ2 table | ◐ guided best-first done (E2); MCTS and guided saturation not built |
+| 5 Self-play | expert iteration loop | solved-frontier curve | ☐ |
+| 6 Generalization | depth/size/theory splits + ablations | RQ3 table | ◐ depth and held-out-theory splits evaluated (E2); no size split, no ablations |
+| 7 Interp | probes, patching, heuristic distilled from a feature | RQ5 section | ☐ |
+| 8 Ship | TPTP UEQ eval, write-up (arXiv style), demo, blog | someone else reproduces from README | ◐ `isomer prove` demo, README with reproduction steps, released checkpoint; no TPTP eval or write-up |
 
 ## 8. Prior work to read and position against
 

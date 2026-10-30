@@ -165,7 +165,32 @@ def cmd_timecompare(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_prove(args: argparse.Namespace) -> int:
+    from .demo import EXAMPLE_DISCLAIMER, EXAMPLES, DemoError, prove
+
+    if args.example:
+        ex = EXAMPLES[args.example]
+        theory, lhs, rhs = ex.theory, ex.lhs, ex.rhs
+        print(f"example  {args.example}: {ex.note} (shortest proof: {ex.dist} steps)")
+    elif args.lhs is None or args.rhs is None:
+        print("error: give --lhs and --rhs, or --example NAME", file=sys.stderr)
+        return 2
+    else:
+        theory, lhs, rhs = args.theory, args.lhs, args.rhs
+    try:
+        code = prove(theory, lhs, rhs, method=args.method, ckpt=args.ckpt, precision=args.precision,
+                     budget=args.budget, cert_out=args.cert)
+    except DemoError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.example:
+        print(f"note     {EXAMPLE_DISCLAIMER}")
+    return code
+
+
 def main(argv: list[str] | None = None) -> int:
+    from .demo import DEFAULT_CKPT, EXAMPLES  # torch-free; for the prove options
+
     ap = argparse.ArgumentParser(prog="isomer")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("doctor", help="check Python/PyTorch/CUDA").set_defaults(fn=cmd_doctor)
@@ -251,6 +276,23 @@ def main(argv: list[str] | None = None) -> int:
     tp.add_argument("--time", required=True, help="time run directory (baseline rows), e.g. runs/E2time-test_depth")
     tp.add_argument("--out", required=True, help="output directory, e.g. runs/E2-test_depth/report")
     tp.set_defaults(fn=cmd_timecompare)
+    pv = sub.add_parser("prove", help="prove one equation with a searcher and check it with the kernel")
+    pv.add_argument("--theory", default="group", choices=["group", "bool", "lattice", "ring"])
+    pv.add_argument("--lhs", default=None, help='e.g. "(* e (* (inv a) a))"')
+    pv.add_argument("--rhs", default=None, help='e.g. "e"')
+    pv.add_argument("--example", default=None, choices=sorted(EXAMPLES),
+                    help="a built-in example (overrides --theory/--lhs/--rhs). Illustrative only: hand-picked "
+                         "from the dev set because neural-w1 succeeds on them (and, for bool-deep, "
+                         "bestfirst-symbol_bag-w1 does not); not evidence -- see docs/results/E2")
+    pv.add_argument("--method", default="neural-w1",
+                    help="neural-w1 (default), neural-w3, neural-greedy, or a baseline such as "
+                         "bestfirst-symbol_bag-w1, bfs-bidir, bfs-fwd")
+    pv.add_argument("--ckpt", default=DEFAULT_CKPT, help="checkpoint for neural methods")
+    pv.add_argument("--precision", default=None, choices=["bf16-fast", "fp32"],
+                    help="neural inference precision (default: bf16-fast on CUDA, fp32 on CPU)")
+    pv.add_argument("--budget", type=int, default=1000, help="node expansions")
+    pv.add_argument("--cert", default=None, help="write the proof certificate (JSON) here")
+    pv.set_defaults(fn=cmd_prove)
     args = ap.parse_args(argv)
     args.argv = list(sys.argv) if argv is None else ["isomer", *argv]
     return args.fn(args)

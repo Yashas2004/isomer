@@ -15,6 +15,8 @@ assert get_searcher("neural-w1@x.pt").keywords["ckpt"] == "x.pt"   # parsing loa
 import isomer.learn, isomer.learn.states, isomer.learn.tokenizer, isomer.learn.data, isomer.learn.metrics
 from isomer.cli import main
 assert main(["demo"]) == 0
+assert main(["prove", "--example", "group-short", "--method", "bfs-bidir"]) == 0
+assert main(["prove", "--example", "group-short", "--ckpt", "missing.pt"]) == 2
 try:
     main(["train", "--help"])
 except SystemExit as e:

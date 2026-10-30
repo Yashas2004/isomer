@@ -15,3 +15,16 @@ def tiny_data(tmp_path_factory):
     out = tmp_path_factory.mktemp("isobench")
     build(tiny_v2_config(out), progress=False)
     return out
+
+
+@pytest.fixture(scope="session")
+def tiny_ckpt(tmp_path_factory):
+    """A tiny randomly initialized distance model (needs torch), so CI covers the neural paths."""
+    torch = pytest.importorskip("torch")
+    from isomer.learn.model import DistanceModel, ModelConfig, save_checkpoint
+
+    torch.manual_seed(0)
+    model = DistanceModel(ModelConfig(d_model=32, n_layers=2, n_heads=4, ffn_hidden=86))
+    path = tmp_path_factory.mktemp("ckpt") / "tiny.pt"
+    save_checkpoint(path, model)
+    return str(path)

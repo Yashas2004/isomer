@@ -16,7 +16,6 @@ torch = pytest.importorskip("torch")
 from isomer.bench.run import BenchConfig, BenchError, run
 from isomer.core.proof import Problem
 from isomer.core.theories import THEORIES
-from isomer.learn.model import DistanceModel, ModelConfig, save_checkpoint
 from isomer.search.best_first import best_first
 from isomer.search.common import Budget, get_searcher
 from isomer.search.heuristics import zero
@@ -24,15 +23,6 @@ from isomer.search.neural import _load, checkpoint_of, neural_best_first, precis
 
 REAL_CKPT = Path("runs/h-v1/best.pt")
 DEV = Path("data/isobench-v2-dev")
-
-
-@pytest.fixture(scope="module")
-def tiny_ckpt(tmp_path_factory):
-    torch.manual_seed(0)
-    model = DistanceModel(ModelConfig(d_model=32, n_layers=2, n_heads=4, ffn_hidden=86))
-    path = tmp_path_factory.mktemp("ckpt") / "tiny.pt"
-    save_checkpoint(path, model)
-    return str(path)
 
 
 def problems(data, split, n=10):
