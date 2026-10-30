@@ -9,6 +9,9 @@ import sys
 sys.modules["torch"] = None          # any `import torch` now raises ImportError
 import isomer, isomer.cli, isomer.core.kernel, isomer.search.bfs, isomer.search.best_first
 import isomer.search.heuristics, isomer.bench.run, isomer.data.build
+import isomer.search.neural
+from isomer.search.common import get_searcher
+assert get_searcher("neural-w1@x.pt").keywords["ckpt"] == "x.pt"   # parsing loads nothing
 import isomer.learn, isomer.learn.states, isomer.learn.tokenizer, isomer.learn.data, isomer.learn.metrics
 from isomer.cli import main
 assert main(["demo"]) == 0

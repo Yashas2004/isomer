@@ -1,4 +1,4 @@
-"""Batched inference for a trained distance model. Not used by search yet.
+"""Batched inference for a trained distance model.
 
 ``LearnedHeuristic`` has the ``Heuristic`` call signature ``h(t, goal)`` and
 a batched ``h_batch``. Terms are hashable and immutable, so an LRU cache keyed
@@ -8,6 +8,11 @@ repeated forward passes.
 Limit: a pair longer than the model's ``max_len`` raises ``ValueError``
 (``tokenizer.encode``). It is never truncated, because truncation would
 change the term.
+
+``precision="fp32"`` (no autocast) is what search uses: there, scores must be
+reproducible bit for bit (``search.neural``). ``scores`` bypasses the cache,
+because a cached value computed inside another batch can differ in the last
+bit from a fresh one.
 """
 
 from __future__ import annotations
@@ -23,8 +28,11 @@ from .tokenizer import PAD_ID, encode
 
 class LearnedHeuristic:
     def __init__(self, ckpt_path: str, device: str = "cuda", batch_size: int = 512,
-                 cache_size: int = 100_000) -> None:
+                 cache_size: int = 100_000, precision: str = "bf16") -> None:
+        if precision not in ("bf16", "fp32"):
+            raise ValueError(f"precision must be bf16 or fp32, got {precision!r}")
         self.device = torch.device(device)
+        self.precision = precision
         self.model, self.meta = load_checkpoint(ckpt_path, self.device)
         self.batch_size = batch_size
         self.cache_size = cache_size
@@ -41,9 +49,13 @@ class LearnedHeuristic:
             for row, s in enumerate(seqs):
                 ids[row, :len(s)] = torch.tensor(s, dtype=torch.long)
             with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16,
-                                enabled=self.device.type == "cuda"):
+                                enabled=self.device.type == "cuda" and self.precision == "bf16"):
                 out.extend(self.model(ids.to(self.device)).float().cpu().tolist())
         return out
+
+    def scores(self, states: list[Term], goal: Term) -> list[float]:
+        """Uncached predictions, in order: one forward pass per ``batch_size`` states."""
+        return self._forward(states, goal) if states else []
 
     def h_batch(self, states: list[Term], goal: Term) -> list[float]:
         """Predicted distances of ``states`` to ``goal``; only cache misses are computed."""

@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from conftest import tiny_v2_config
 
 from isomer.core import kernel
@@ -68,3 +69,26 @@ def test_walk_cap_check():
     walk = Proof(Problem.parse(theory, "a", "(* e a)"), (up, up, down))
     assert walk.verify()
     assert walk_in_action_space(walk, slack=2) and not walk_in_action_space(walk, slack=1)
+
+
+def test_exclude_ids_from(tiny_data, tmp_path):
+    """A dev build with the same seed regenerates the same walks; every one
+    whose id is in the excluded dataset is skipped and replaced."""
+    import dataclasses
+
+    def ids(d):
+        return {json.loads(line)["id"] for f in d.glob("*.jsonl")
+                for line in f.read_text(encoding="utf-8").splitlines()}
+
+    cfg = dataclasses.replace(tiny_v2_config(tmp_path / "dev"), exclude_ids_from=str(tiny_data))
+    sheet = build(cfg, progress=False)
+    assert not ids(tmp_path / "dev") & ids(tiny_data)
+    skipped = sheet["excluded_ids"]["skipped_at_generation"]
+    assert sum(skipped.values()) > 0 and sheet["excluded_ids"]["n_ids"] == len(ids(tiny_data))
+    notes = json.loads((tmp_path / "dev" / "dev_notes.json").read_text(encoding="utf-8"))
+    assert notes["skipped_at_generation"] == skipped and notes["counts"] == sheet["counts"]
+    build(dataclasses.replace(cfg, out=str(tmp_path / "dev2")), progress=False)
+    for name in [*(f"{s}.jsonl" for s in SPLITS), "dev_notes.json"]:
+        assert (tmp_path / "dev" / name).read_bytes() == (tmp_path / "dev2" / name).read_bytes()
+    with pytest.raises(FileNotFoundError):
+        build(dataclasses.replace(cfg, exclude_ids_from=str(tmp_path / "empty")), progress=False)

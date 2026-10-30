@@ -28,13 +28,20 @@ run ends with a loud warning and a non-zero exit code. A searcher that raises
 is recorded with status ``"error"``. It also counts as unsolved and makes the
 exit code non-zero, but it does not kill the run.
 
-``results.jsonl`` is reproducible except for the ``seconds`` column, which
-depends on the machine.
+**Neural methods** (``neural-w1@CKPT`` etc., ``search.neural``) run the model
+on the GPU if one is available. config.json records every checkpoint's path
+and sha256. Each worker process holds its own CUDA context (~0.5 GB) and a
+copy of the model, so a run containing a neural method defaults to 2 workers
+instead of all cores but one; ``--workers`` overrides that.
+
+``results.jsonl`` is reproducible except for the ``seconds`` and
+``model_seconds`` columns, which depend on the machine.
 """
 
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import math
 import os
@@ -52,6 +59,11 @@ from ..core import kernel
 from ..core.proof import Problem, Proof
 from ..core.theories import THEORIES
 from ..search.common import Budget, SearchResult, get_searcher
+from ..search.neural import checkpoint_of, is_neural
+
+# Optional per-row stats, copied from SearchResult.stats when a searcher reports them.
+EXTRA_STATS = ("model_calls", "model_seconds", "device", "gpu_peak_bytes")
+NEURAL_DEFAULT_WORKERS = 2
 
 
 class BenchError(Exception):
@@ -116,6 +128,7 @@ def evaluate(record: dict, split: str, method: str, max_budget: int, result: Sea
     row.update(expansions=result.expansions, generated=result.generated,
                nodes_stored=result.stats.get("nodes_stored"), stop=result.stats.get("stop"),
                seconds=round(result.seconds, 4), status="ok")
+    row.update({k: result.stats[k] for k in EXTRA_STATS if k in result.stats})
     if result.proof is not None:
         proof = Proof(_problem(record), result.proof.steps)
         verdict = kernel.check_certificate(proof.certificate())
@@ -272,6 +285,9 @@ def _config_json(cfg: BenchConfig, budget: Budget, n_problems: int, workers: int
         "workers": workers,
         "n_problems": n_problems,
         "dataset_format": fmt,
+        "checkpoints": {m: {"path": checkpoint_of(m),
+                            "sha256": hashlib.sha256(Path(checkpoint_of(m)).read_bytes()).hexdigest()}
+                        for m in cfg.methods if is_neural(m)},
     }
 
 
@@ -292,6 +308,8 @@ def run(cfg: BenchConfig) -> int:
             get_searcher(m)
         except KeyError as exc:
             raise BenchError(exc.args[0]) from None
+        if is_neural(m) and not Path(checkpoint_of(m)).is_file():
+            raise BenchError(f"{m}: checkpoint {checkpoint_of(m)} not found")
     records = load_problems(cfg.data, cfg.split, cfg.limit)
     out = Path(cfg.out)
     if out.exists() and not cfg.overwrite:
@@ -299,7 +317,12 @@ def run(cfg: BenchConfig) -> int:
 
     budget = Budget(max_expansions=max(cfg.budgets), max_seconds=cfg.max_seconds, max_nodes=cfg.max_nodes)
     jobs = [(m, r, cfg.split, budget) for m in sorted(cfg.methods) for r in records]
-    workers = cfg.workers or max(1, (os.cpu_count() or 2) - 1)
+    if cfg.workers:
+        workers = cfg.workers
+    elif any(is_neural(m) for m in cfg.methods):
+        workers = NEURAL_DEFAULT_WORKERS   # one CUDA context per worker
+    else:
+        workers = max(1, (os.cpu_count() or 2) - 1)
     print(f"bench: {len(cfg.methods)} methods x {len(records)} problems ({cfg.split}), "
           f"max budget {budget.max_expansions}, {workers} worker(s)", flush=True)
     label_budget = label_budget_of(cfg.data, cfg.split)

@@ -73,12 +73,20 @@ class Searcher(Protocol):
 
 SEARCHERS: dict[str, Callable[[Problem, Budget], SearchResult]] = {}
 
+# Searchers parameterized by a path, named ``prefix@path`` (e.g.
+# ``neural-w1@runs/h-v1/best.pt``): prefix -> factory(path) -> searcher. The
+# factory must not do heavy work (no model loading): it also validates names.
+PARAMETRIC: dict[str, Callable[[str], Callable[[Problem, Budget], SearchResult]]] = {}
+
 
 def get_searcher(name: str) -> Callable[[Problem, Budget], SearchResult]:
-    try:
+    if name in SEARCHERS:
         return SEARCHERS[name]
-    except KeyError:
-        raise KeyError(f"unknown searcher {name!r}; valid: {', '.join(sorted(SEARCHERS))}") from None
+    prefix, sep, arg = name.partition("@")
+    if sep and arg and prefix in PARAMETRIC:
+        return PARAMETRIC[prefix](arg)
+    raise KeyError(f"unknown searcher {name!r}; valid: {', '.join(sorted(SEARCHERS))}, "
+                   f"or {', '.join(f'{p}@PATH' for p in sorted(PARAMETRIC))}")
 
 
 def size_cap(problem: Problem, slack: int) -> int:

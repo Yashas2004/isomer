@@ -84,6 +84,7 @@ class BuildConfig:
     max_size_slack: int = 6             # action space: terms up to max(|lhs|, |rhs|) + slack (ADR-002)
     pool_max_size: int = 3              # problem pool: subterms of lhs/rhs up to this size (ADR-003)
     seed: int = 0
+    exclude_ids_from: str | None = None  # dataset dir whose ids must not reappear (dev sets)
     workers: int = field(default_factory=lambda: max(1, (os.cpu_count() or 2) - 1))
 
 
@@ -127,9 +128,12 @@ def walk_in_action_space(walk: Proof, slack: int) -> bool:
 
 
 def _generate(theory_name: str, n: int, walk_lengths: tuple[int, ...], cfg: BuildConfig, seed: int,
-              exclude: set[str]) -> tuple[list[Proof], int]:
-    """``n`` unique problems from random walks, skipping ids in ``exclude``.
-    Also returns how many walks were rejected for leaving the size cap.
+              exclude: set[str], external: frozenset[str] = frozenset()) -> tuple[list[Proof], int, int]:
+    """``n`` unique problems from random walks, skipping ids in ``exclude``
+    (claimed by earlier pools) and in ``external`` (another dataset's ids).
+    Also returns how many walks were rejected for leaving the size cap, and
+    how many were skipped only because their id is in ``external``. A skipped
+    walk is replaced by the next one, so pool sizes do not shrink.
 
     Rejecting such walks (instead of confining walks to ``size(start) + slack``
     while they run) keeps deep problems: the cap also counts the *final* term,
@@ -138,7 +142,7 @@ def _generate(theory_name: str, n: int, walk_lengths: tuple[int, ...], cfg: Buil
     rng = random.Random(seed)
     seen: set[str] = set()
     out: list[Proof] = []
-    attempts = rejected = 0
+    attempts = rejected = excluded = 0
     while len(out) < n and attempts < n * 50:
         attempts += 1
         k = rng.choice(walk_lengths)
@@ -152,9 +156,12 @@ def _generate(theory_name: str, n: int, walk_lengths: tuple[int, ...], cfg: Buil
         pid = problem_id(theory_name, str(p.problem.lhs), str(p.problem.rhs))
         if pid in seen or pid in exclude:
             continue
+        if pid in external:
+            excluded += 1
+            continue
         seen.add(pid)
         out.append(p)
-    return out, rejected
+    return out, rejected, excluded
 
 
 def _label(job: LabelJob) -> dict:
@@ -231,8 +238,22 @@ def _hist(values: list) -> dict[str, int]:
     return {str(k): v for k, v in sorted(Counter(values).items(), key=lambda kv: (kv[0] is None, kv[0] or 0))}
 
 
+def external_ids(data_dir: str) -> frozenset[str]:
+    """Every problem id in any ``*.jsonl`` split of ``data_dir``."""
+    files = sorted(Path(data_dir).glob("*.jsonl"))
+    if not files:
+        raise FileNotFoundError(f"--exclude-ids-from {data_dir}: no *.jsonl splits found")
+    ids: set[str] = set()
+    for f in files:
+        with open(f, encoding="utf-8") as fh:
+            ids.update(json.loads(line)["id"] for line in fh if line.strip())
+    return frozenset(ids)
+
+
 def build(cfg: BuildConfig, progress: bool = True) -> dict:
     t0 = time.perf_counter()
+    external = external_ids(cfg.exclude_ids_from) if cfg.exclude_ids_from else frozenset()
+    skipped: dict[str, int] = {}
     gen_seconds: dict[str, float] = {}
     jobs: dict[str, list[LabelJob]] = {p: [] for p in POOLS}
     plan = {
@@ -249,8 +270,10 @@ def build(cfg: BuildConfig, progress: bool = True) -> dict:
         theories, n, walks, budget = plan[pool]
         rejected[pool] = 0
         for name in theories:
-            problems, rej = _generate(name, n, walks, cfg, _seed(cfg.seed, pool, name), exclude=claimed)
+            problems, rej, exc = _generate(name, n, walks, cfg, _seed(cfg.seed, pool, name), exclude=claimed,
+                                           external=external)
             rejected[pool] += rej
+            skipped[pool] = skipped.get(pool, 0) + exc
             for p in problems:
                 lhs, rhs = str(p.problem.lhs), str(p.problem.rhs)
                 claimed.add(problem_id(name, lhs, rhs))
@@ -281,6 +304,8 @@ def build(cfg: BuildConfig, progress: bool = True) -> dict:
                 dropped[pool] += 1
             else:
                 splits[dest].append(rec)
+    clash = [r["id"] for v in splits.values() for r in v if r["id"] in external]
+    assert not clash, f"excluded ids leaked into the build: {clash[:5]}"
     out = Path(cfg.out)
     out.mkdir(parents=True, exist_ok=True)
     for name, recs_ in splits.items():
@@ -334,5 +359,14 @@ def build(cfg: BuildConfig, progress: bool = True) -> dict:
             "every stored proof was accepted by the trusted kernel at build time.",
         ],
     }
+    if cfg.exclude_ids_from:
+        excl = {"from": cfg.exclude_ids_from, "n_ids": len(external),
+                "ids_sha256": hashlib.sha256("\n".join(sorted(external)).encode()).hexdigest(),
+                "skipped_at_generation": {p: skipped.get(p, 0) for p in POOLS}}
+        sheet["excluded_ids"] = excl
+        notes = {"purpose": f"dev set: disjoint from {cfg.exclude_ids_from}; for tuning/plumbing only, "
+                            "never for reported results",
+                 "seed": cfg.seed, "counts": sheet["counts"], **excl}
+        (out / "dev_notes.json").write_text(json.dumps(notes, indent=2, sort_keys=True), encoding="utf-8")
     (out / "datasheet.json").write_text(json.dumps(sheet, indent=2, sort_keys=True), encoding="utf-8")
     return sheet

@@ -64,7 +64,8 @@ def cmd_data(args: argparse.Namespace) -> int:
 
     cfg = BuildConfig(out=args.out, train_per_theory=args.train_per_theory, eval_per_theory=args.eval_per_theory,
                       heldout_per_theory=args.heldout_per_theory, train_label_budget=args.train_label_budget,
-                      label_budget=args.label_budget, label_max_nodes=args.label_max_nodes, seed=args.seed)
+                      label_budget=args.label_budget, label_max_nodes=args.label_max_nodes, seed=args.seed,
+                      exclude_ids_from=args.exclude_ids_from)
     if args.workers:
         cfg.workers = args.workers
     print(f"building {cfg.out} with {cfg.workers} worker processes ...")
@@ -155,6 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     dp.add_argument("--label-budget", type=int, default=20000, help="eval/held-out labelling expansions")
     dp.add_argument("--label-max-nodes", type=int, default=1_500_000, help="eval/held-out node cap")
     dp.add_argument("--seed", type=int, default=0)
+    dp.add_argument("--exclude-ids-from", default=None,
+                    help="dataset dir: never generate a problem whose id is in any of its splits (dev sets)")
     dp.add_argument("--workers", type=int, default=0, help="0 = all cores but one")
     dp.set_defaults(fn=cmd_data)
     stp = sub.add_parser("states", help="distance-labelled (state, goal) examples from train.jsonl")
@@ -190,7 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     bp.add_argument("--methods", required=True, help="comma-separated searcher names")
     bp.add_argument("--budgets", required=True, help="comma-separated expansion budgets")
     bp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
-    bp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
+    bp.add_argument("--workers", type=int, default=0,
+                    help="0 = all cores but one (2 if a neural method is present: each worker holds its own "
+                         "CUDA context, ~0.5 GB); 1 = in-process")
     bp.add_argument("--max-seconds", type=float, default=None,
                     help="per-run wall-clock cap (breaks the prefix property; cells above it are censored)")
     bp.add_argument("--max-nodes", type=int, default=None,
