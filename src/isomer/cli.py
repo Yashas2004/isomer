@@ -153,6 +153,18 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 2
 
 
+def cmd_timecompare(args: argparse.Namespace) -> int:
+    from .bench.run import BenchError
+    from .bench.timecompare import timecompare
+
+    try:
+        timecompare(args.main, args.time, args.out)
+    except BenchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="isomer")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -234,6 +246,11 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--reference", default=None,
                     help="method for paired comparisons (default: bfs-fwd if it is in the run)")
     rp.set_defaults(fn=cmd_report)
+    tp = sub.add_parser("timecompare", help="equal-time analysis from a main run and a time run (no re-running)")
+    tp.add_argument("--main", required=True, help="main run directory (neural rows), e.g. runs/E2-test_depth")
+    tp.add_argument("--time", required=True, help="time run directory (baseline rows), e.g. runs/E2time-test_depth")
+    tp.add_argument("--out", required=True, help="output directory, e.g. runs/E2-test_depth/report")
+    tp.set_defaults(fn=cmd_timecompare)
     args = ap.parse_args(argv)
     args.argv = list(sys.argv) if argv is None else ["isomer", *argv]
     return args.fn(args)
