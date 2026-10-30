@@ -49,6 +49,7 @@ from .common import (
     Budget,
     Parents,
     SearchResult,
+    max_state_tokens,
     out_of_memory,
     out_of_time,
     size_cap,
@@ -109,9 +110,12 @@ def neural_best_first(problem: Problem, budget: Budget, ckpt: str, w: float = 1.
         if h.device.type == "cuda":
             import torch
             stats["gpu_peak_bytes"] = torch.cuda.max_memory_allocated(h.device)
-        return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
-                            exhausted=stop == "exhausted", lower_bound=len(proof.steps) if proof else 0,
-                            stats=stats)
+        res = SearchResult(proof, expansions, generated, time.perf_counter() - t0,
+                           exhausted=stop == "exhausted", lower_bound=len(proof.steps) if proof else 0,
+                           stats=stats)
+        if budget.track_state_tokens:   # after the clock was read
+            res.stats["max_state_tokens"] = max_state_tokens(parents, goal)
+        return res
 
     def priority(g: int, hv: float) -> float:
         return hv if greedy else g + w * hv

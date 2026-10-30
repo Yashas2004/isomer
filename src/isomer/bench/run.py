@@ -62,7 +62,7 @@ from ..search.common import Budget, SearchResult, get_searcher
 from ..search.neural import checkpoint_of, is_neural, precision_of
 
 # Optional per-row stats, copied from SearchResult.stats when a searcher reports them.
-EXTRA_STATS = ("model_calls", "model_seconds", "device", "gpu_peak_bytes", "precision")
+EXTRA_STATS = ("model_calls", "model_seconds", "device", "gpu_peak_bytes", "precision", "max_state_tokens")
 NEURAL_DEFAULT_WORKERS = 2
 
 
@@ -78,6 +78,7 @@ class BenchConfig:
     budgets: list[int]
     out: str
     limit: int | None = None
+    ids: str | None = None          # file of problem ids (isomer stratify); restricts the split
     workers: int = 0
     max_seconds: float | None = None
     max_nodes: int | None = None
@@ -89,7 +90,9 @@ class BenchConfig:
 # Loading
 # --------------------------------------------------------------------------
 
-def load_problems(data: str, split: str, limit: int | None = None) -> list[dict]:
+def load_problems(data: str, split: str, limit: int | None = None, ids: str | None = None) -> list[dict]:
+    """Records of a split in id order, restricted to the ids in ``ids`` (a
+    sample file) if given, then to the first ``limit``."""
     path = Path(data) / f"{split}.jsonl"
     if not path.is_file():
         have = sorted(p.stem for p in Path(data).glob("*.jsonl")) if Path(data).is_dir() else []
@@ -100,6 +103,16 @@ def load_problems(data: str, split: str, limit: int | None = None) -> list[dict]
         if r["theory"] not in THEORIES:
             raise BenchError(f"record {r['id']} has unknown theory {r['theory']!r}; "
                              f"valid: {', '.join(sorted(THEORIES))}")
+    if ids is not None:
+        from ..data.stratify import read_ids
+        try:
+            wanted = set(read_ids(ids))
+        except OSError as exc:
+            raise BenchError(f"cannot read --ids file {ids}: {exc}") from None
+        missing = sorted(wanted - {r["id"] for r in records})
+        if missing:
+            raise BenchError(f"{len(missing)} id(s) from {ids} are not in {split}: {', '.join(missing[:5])}")
+        records = [r for r in records if r["id"] in wanted]
     return records[:limit] if limit is not None else records
 
 
@@ -282,6 +295,8 @@ def _config_json(cfg: BenchConfig, budget: Budget, n_problems: int, workers: int
         "data": cfg.data,
         "split": cfg.split,
         "limit": cfg.limit,
+        "ids_file": cfg.ids,
+        "ids_sha256": hashlib.sha256(Path(cfg.ids).read_bytes()).hexdigest() if cfg.ids else None,
         "workers": workers,
         "n_problems": n_problems,
         "dataset_format": fmt,
@@ -310,12 +325,13 @@ def run(cfg: BenchConfig) -> int:
             raise BenchError(exc.args[0]) from None
         if is_neural(m) and not Path(checkpoint_of(m)).is_file():
             raise BenchError(f"{m}: checkpoint {checkpoint_of(m)} not found")
-    records = load_problems(cfg.data, cfg.split, cfg.limit)
+    records = load_problems(cfg.data, cfg.split, cfg.limit, cfg.ids)
     out = Path(cfg.out)
     if out.exists() and not cfg.overwrite:
         raise BenchError(f"{out} already exists; pass --overwrite to replace its results")
 
-    budget = Budget(max_expansions=max(cfg.budgets), max_seconds=cfg.max_seconds, max_nodes=cfg.max_nodes)
+    budget = Budget(max_expansions=max(cfg.budgets), max_seconds=cfg.max_seconds, max_nodes=cfg.max_nodes,
+                    track_state_tokens=True)
     jobs = [(m, r, cfg.split, budget) for m in sorted(cfg.methods) for r in records]
     if cfg.workers:
         workers = cfg.workers

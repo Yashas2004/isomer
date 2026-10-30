@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from itertools import chain
 
 from ..core.proof import Problem, Proof
 from ..core.rewrite import Rule, Step, invert_step, successors
@@ -26,6 +27,7 @@ from .common import (
     Budget,
     Parents,
     SearchResult,
+    max_state_tokens,
     out_of_memory,
     out_of_time,
     size_cap,
@@ -38,7 +40,7 @@ __all__ = ["SearchResult", "bidir_bfs", "bidirectional_bfs", "forward_bfs"]
 def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: int | None = None,
                       max_depth: int = 64, pool_max_size: int = 3,
                       max_seconds: float | None = None, max_nodes: int | None = None,
-                      pool: Sequence[Term] | None = None) -> SearchResult:
+                      pool: Sequence[Term] | None = None, track_state_tokens: bool = False) -> SearchResult:
     """Grow BFS layers from both ends, always expanding the smaller frontier,
     until the two explored sets meet. Returns a shortest proof under the
     action-space limits above (layer-complete expansion guarantees this).
@@ -50,7 +52,7 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
     states must be measured in the *original* problem's action space: a fresh
     ``Problem(state, goal)`` would compute a different pool (and size cap)
     from its own sides. Pass the original pool here and its cap as
-    ``max_size``."""
+    ``max_size``. ``track_state_tokens``: see ``Budget``."""
     t0 = time.perf_counter()
     rules = problem.theory.rules()
     rule_list = list(rules.values())
@@ -58,12 +60,19 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
     if max_size is None:
         max_size = size_cap(problem, 6)
 
-    if problem.lhs == problem.rhs:
-        return SearchResult(Proof(problem, ()), 0, 0, time.perf_counter() - t0,
-                            stats={"nodes_stored": 1, "stop": "solved"})
-
     fwd: Parents = {problem.lhs: None}
     bwd: Parents = {problem.rhs: None}
+
+    def done(res: SearchResult) -> SearchResult:
+        # after the clock was read: never part of ``seconds``
+        if track_state_tokens:
+            res.stats["max_state_tokens"] = max_state_tokens(chain(fwd, bwd), problem.rhs)
+        return res
+
+    if problem.lhs == problem.rhs:
+        return done(SearchResult(Proof(problem, ()), 0, 0, time.perf_counter() - t0,
+                                 stats={"nodes_stored": 1, "stop": "solved"}))
+
     fwd_frontier, bwd_frontier = [problem.lhs], [problem.rhs]
     expansions = generated = 0
     fwd_depth = bwd_depth = 0   # number of fully completed layers on each side
@@ -71,10 +80,10 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
     def fail(stop: str, exhausted: bool = False) -> SearchResult:
         # Every term within fwd_depth of lhs and bwd_depth of rhs has been seen
         # and the sets are disjoint, so dist > fwd_depth + bwd_depth.
-        return SearchResult(None, expansions, generated, time.perf_counter() - t0,
-                            exhausted=exhausted, lower_bound=fwd_depth + bwd_depth + 1,
-                            stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
-                                   "nodes_stored": len(fwd) + len(bwd), "stop": stop})
+        return done(SearchResult(None, expansions, generated, time.perf_counter() - t0,
+                                 exhausted=exhausted, lower_bound=fwd_depth + bwd_depth + 1,
+                                 stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
+                                        "nodes_stored": len(fwd) + len(bwd), "stop": stop}))
 
     while fwd_frontier and bwd_frontier and fwd_depth + bwd_depth < max_depth:
         forward = len(fwd_frontier) <= len(bwd_frontier)
@@ -103,10 +112,10 @@ def bidirectional_bfs(problem: Problem, max_expansions: int = 20_000, max_size: 
         if meet is not None:
             steps = _join(rules, fwd, bwd, meet)
             proof = Proof(problem, tuple(steps))
-            return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
-                                lower_bound=len(steps),
-                                stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
-                                       "nodes_stored": len(fwd) + len(bwd), "stop": "solved"})
+            return done(SearchResult(proof, expansions, generated, time.perf_counter() - t0,
+                                     lower_bound=len(steps),
+                                     stats={"fwd_seen": len(fwd), "bwd_seen": len(bwd),
+                                            "nodes_stored": len(fwd) + len(bwd), "stop": "solved"}))
         if forward:
             fwd_frontier, fwd_depth = next_frontier, fwd_depth + 1
         else:
@@ -135,7 +144,7 @@ def bidir_bfs(problem: Problem, budget: Budget) -> SearchResult:
     return bidirectional_bfs(problem, max_expansions=budget.max_expansions,
                              max_size=size_cap(problem, budget.max_size_slack),
                              pool_max_size=budget.pool_max_size, max_seconds=budget.max_seconds,
-                             max_nodes=budget.max_nodes)
+                             max_nodes=budget.max_nodes, track_state_tokens=budget.track_state_tokens)
 
 
 def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
@@ -151,9 +160,12 @@ def forward_bfs(problem: Problem, budget: Budget) -> SearchResult:
 
     def result(stop: str, proof: Proof | None = None, depth: int = 0) -> SearchResult:
         lb = len(proof.steps) if proof else depth + 1
-        return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
-                            exhausted=stop == "exhausted", lower_bound=lb,
-                            stats={"nodes_stored": len(parents), "stop": stop})
+        res = SearchResult(proof, expansions, generated, time.perf_counter() - t0,
+                           exhausted=stop == "exhausted", lower_bound=lb,
+                           stats={"nodes_stored": len(parents), "stop": stop})
+        if budget.track_state_tokens:   # after the clock was read
+            res.stats["max_state_tokens"] = max_state_tokens(parents, problem.rhs)
+        return res
 
     expansions = generated = 0
     if problem.lhs == problem.rhs:

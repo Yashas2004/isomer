@@ -31,7 +31,7 @@ with ``max_seconds=None``, because wall-clock limits are not reproducible.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -65,6 +65,9 @@ class Budget:
     max_size_slack: int = 6
     pool_max_size: int = 3
     max_nodes: int | None = None   # cap on nodes_stored (ADR-004)
+    # Report stats["max_state_tokens"]: the longest encoded (state, goal) pair among stored
+    # terms. Computed after the clock stops, so it never changes ``seconds``.
+    track_state_tokens: bool = False
 
 
 class Searcher(Protocol):
@@ -104,6 +107,23 @@ def out_of_memory(nodes: int, max_nodes: int | None) -> bool:
 
 # parent map: term -> (previous term, step that turned previous into term)
 Parents = dict[Term, tuple[Term, Step] | None]
+
+
+def token_count(t: Term, memo: dict[Term, int]) -> int:
+    """Tokens of ``t`` as ``learn.tokenizer.term_tokens`` emits them: a leaf is 1,
+    an application ``( op args )`` is 3 plus its arguments. Torch-free."""
+    n = memo.get(t)
+    if n is None:
+        args = getattr(t, "args", ())
+        n = memo[t] = 3 + sum(token_count(a, memo) for a in args) if args else 1
+    return n
+
+
+def max_state_tokens(terms: Iterable[Term], goal: Term) -> int:
+    """Longest ``tokenizer.n_tokens(state, goal)`` over ``terms``:
+    [CLS] state [SEP] goal [SEP]. Used to check model length extrapolation."""
+    memo: dict[Term, int] = {}
+    return 3 + max((token_count(t, memo) for t in terms), default=0) + token_count(goal, memo)
 
 
 def steps_from_parents(parents: Parents, t: Term) -> list[Step]:

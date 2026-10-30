@@ -104,6 +104,23 @@ def cmd_train(args: argparse.Namespace) -> int:
     return main_train(cfg)
 
 
+def cmd_stratify(args: argparse.Namespace) -> int:
+    from .data.stratify import write_sample
+
+    # canonical command (not sys.argv): the header must not depend on the interpreter path
+    command = (f"python -m isomer stratify --data {args.data} --split {args.split} --n {args.n} "
+               f"--strata {args.strata} --seed {args.seed} --out {args.out}")
+    try:
+        res = write_sample(args.data, args.split, args.n, args.strata, args.seed, args.out, command)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    for k, (pop, n) in res["strata"].items():
+        print(f"  {k}: {pop} -> {n}")
+    print(f"{len(res['ids'])} ids -> {args.out}")
+    return 0
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     from .bench.run import BenchConfig, BenchError, run
 
@@ -116,7 +133,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         print(f"error: --budgets must be comma-separated integers, got {args.budgets!r}", file=sys.stderr)
         return 2
     cfg = BenchConfig(data=args.data, split=args.split, methods=csv(args.methods), budgets=budgets,
-                      out=args.out, limit=args.limit, workers=args.workers, max_seconds=args.max_seconds,
+                      out=args.out, limit=args.limit, ids=args.ids, workers=args.workers, max_seconds=args.max_seconds,
                       max_nodes=args.max_nodes, overwrite=args.overwrite, argv=tuple(args.argv))
     try:
         return run(cfg)
@@ -187,12 +204,21 @@ def main(argv: list[str] | None = None) -> int:
     tp.add_argument("--max-steps", type=int, default=None)
     tp.add_argument("--overwrite", action="store_true")
     tp.set_defaults(fn=cmd_train)
+    sfp = sub.add_parser("stratify", help="stratified id sample of a split (for pre-registered experiments)")
+    sfp.add_argument("--data", required=True)
+    sfp.add_argument("--split", required=True)
+    sfp.add_argument("--n", type=int, required=True)
+    sfp.add_argument("--strata", required=True, choices=["dist", "dist_lb", "theory_dist"])
+    sfp.add_argument("--seed", type=int, default=0)
+    sfp.add_argument("--out", required=True)
+    sfp.set_defaults(fn=cmd_stratify)
     bp = sub.add_parser("bench", help="run searchers on an IsoBench split, kernel-check, summarize")
     bp.add_argument("--data", required=True, help="dataset directory, e.g. data/isobench-v2")
     bp.add_argument("--split", default="test_id")
     bp.add_argument("--methods", required=True, help="comma-separated searcher names")
     bp.add_argument("--budgets", required=True, help="comma-separated expansion budgets")
     bp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
+    bp.add_argument("--ids", default=None, help="file of problem ids (isomer stratify); restrict the split to them")
     bp.add_argument("--workers", type=int, default=0,
                     help="0 = all cores but one (2 if a neural method is present: each worker holds its own "
                          "CUDA context, ~0.5 GB); 1 = in-process")

@@ -32,6 +32,7 @@ from .common import (
     Budget,
     Parents,
     SearchResult,
+    max_state_tokens,
     out_of_memory,
     out_of_time,
     size_cap,
@@ -50,10 +51,13 @@ def best_first(problem: Problem, budget: Budget, h: Heuristic = zero, w: float =
     expansions = generated = 0
 
     def result(stop: str, proof: Proof | None = None) -> SearchResult:
-        return SearchResult(proof, expansions, generated, time.perf_counter() - t0,
-                            exhausted=stop == "exhausted",
-                            lower_bound=len(proof.steps) if proof else 0,
-                            stats={"nodes_stored": len(parents), "stop": stop})
+        res = SearchResult(proof, expansions, generated, time.perf_counter() - t0,
+                           exhausted=stop == "exhausted",
+                           lower_bound=len(proof.steps) if proof else 0,
+                           stats={"nodes_stored": len(parents), "stop": stop})
+        if budget.track_state_tokens:   # after the clock was read
+            res.stats["max_state_tokens"] = max_state_tokens(parents, goal)
+        return res
 
     if problem.lhs == goal:
         return result("solved", Proof(problem, ()))

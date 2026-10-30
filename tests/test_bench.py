@@ -214,3 +214,29 @@ def test_max_nodes_flag_censors(data, tmp_path):
     for r in stopped:
         assert not r["solved"]
         assert cell(r, r["expansions"]) == "unsolved" and cell(r, r["expansions"] + 1) == "censored"
+
+
+def test_ids_restricts_and_is_recorded(data, tmp_path, capsys):
+    import hashlib
+    ids = sorted(r["id"] for r in records(data))[1::3]
+    f = tmp_path / "ids.txt"
+    f.write_text("# a sample header\n\n" + "\n".join(ids) + "\n", encoding="utf-8")
+    assert bench(data, tmp_path / "r", "bfs-fwd", "--ids", str(f)) == 0
+    assert sorted(r["id"] for r in read_rows(tmp_path / "r")) == ids
+    cfg = json.loads((tmp_path / "r" / "config.json").read_text(encoding="utf-8"))
+    assert cfg["ids_file"] == str(f) and cfg["ids_sha256"] == hashlib.sha256(f.read_bytes()).hexdigest()
+    assert cfg["n_problems"] == len(ids)
+
+    bad = tmp_path / "bad.txt"
+    bad.write_text("\n".join([*ids, "0" * 64]) + "\n", encoding="utf-8")
+    assert bench(data, tmp_path / "r2", "bfs-fwd", "--ids", str(bad)) == 2
+    assert "1 id(s)" in capsys.readouterr().err and not (tmp_path / "r2").exists()
+
+
+def test_rows_carry_max_state_tokens(data, tmp_path):
+    from isomer.learn.tokenizer import n_tokens
+    assert bench(data, tmp_path / "r", "bfs-fwd,bfs-bidir,bestfirst-symbol_bag-w1") == 0
+    by_id = {r["id"]: r for r in records(data)}
+    for row in read_rows(tmp_path / "r"):
+        rec = by_id[row["id"]]
+        assert row["max_state_tokens"] >= n_tokens(rec["lhs"], rec["rhs"])
