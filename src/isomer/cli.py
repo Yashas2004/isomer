@@ -98,7 +98,8 @@ def cmd_train(args: argparse.Namespace) -> int:
         return 2
     cfg = TrainConfig(states=args.states, out=args.out, epochs=args.epochs, batch_problems=args.batch_problems,
                       lr=args.lr, warmup=args.warmup, d_model=args.d_model, layers=args.layers, heads=args.heads,
-                      lambda_rank=args.lambda_rank, tau=args.tau, rank_target=args.rank_target,
+                      lambda_rank=args.lambda_rank, lambda_huber=args.lambda_huber,
+                      lambda_consistency=args.lambda_consistency, tau=args.tau, rank_target=args.rank_target,
                       micro_tokens=args.micro_tokens, seed=args.seed, device=args.device, max_steps=args.max_steps,
                       overwrite=args.overwrite, argv=tuple(args.argv))
     return main_train(cfg)
@@ -217,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
     stp = sub.add_parser("states", help="distance-labelled (state, goal) examples from train.jsonl")
     stp.add_argument("--data", default="data/isobench-v2")
     stp.add_argument("--out", default="data/states-v2")
-    stp.add_argument("--offpath", type=int, default=3, help="off-path successors per on-path state")
+    stp.add_argument("--offpath", type=int, default=6,
+                     help="off-path successors per on-path state (6 = the published states-v2 used to train h-v1)")
     stp.add_argument("--budget", type=int, default=3000, help="BFS expansions per off-path label")
     stp.add_argument("--limit", type=int, default=None, help="first N problems in id order")
     stp.add_argument("--workers", type=int, default=0, help="0 = all cores but one; 1 = in-process")
@@ -233,6 +235,9 @@ def main(argv: list[str] | None = None) -> int:
     tp.add_argument("--layers", type=int, default=6)
     tp.add_argument("--heads", type=int, default=8)
     tp.add_argument("--lambda-rank", type=float, default=1.0)
+    tp.add_argument("--lambda-huber", type=float, default=1.0, help="0 = ranking-only ablation (E3)")
+    tp.add_argument("--lambda-consistency", type=float, default=0.0,
+                    help="graph-consistency penalty relu(|h(u)-h(v)|-1)^2 on parent-child edges (E3; 0 = off)")
     tp.add_argument("--tau", type=float, default=1.0)
     tp.add_argument("--rank-target", default="optimal", choices=["optimal", "onpath"])
     tp.add_argument("--micro-tokens", type=int, default=32_768, help="padded tokens per micro-batch (GPU memory)")

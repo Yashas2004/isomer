@@ -191,6 +191,7 @@ class Micro:
     index: np.ndarray      # int64 [B], global state indices
     groups: np.ndarray     # int64 [G, K], local row indices, -1 padded, on-path child in column 0
     optimal: np.ndarray    # bool [G, K]
+    parents: np.ndarray | None = None   # int64 [G], local row of each group's parent (on-path, dist p)
 
 
 def collate(ss: StateSet, problems: np.ndarray) -> Micro:
@@ -199,12 +200,24 @@ def collate(ss: StateSet, problems: np.ndarray) -> Micro:
     ids = np.full((len(index), int(lengths.max())), PAD_ID, dtype=np.int64)
     for row, (i, n) in enumerate(zip(index, lengths, strict=True)):
         ids[row, :n] = ss.tokens[ss.offsets[i]:ss.offsets[i] + n]
-    glob, local, base = [], [], 0
+    glob, local, parents, base = [], [], [], 0
     for p in problems:   # global -> local row: shift each problem's indices to where its rows start
+        a = int(ss.problem_starts[p])
         gp = ss.groups[ss.group_starts[p]:ss.group_starts[p + 1]]
         glob.append(gp)
-        local.append(np.where(gp >= 0, gp - ss.problem_starts[p] + base, -1))
-        base += int(ss.problem_starts[p + 1] - ss.problem_starts[p])
+        local.append(np.where(gp >= 0, gp - a + base, -1))
+        parents.append(group_parents(ss, p, gp) - a + base)
+        base += int(ss.problem_starts[p + 1] - a)
     g = np.concatenate(glob)
     return Micro(ids=ids, dist=ss.dist[index].astype(np.float32), index=index, groups=np.concatenate(local),
-                 optimal=optimal_mask(g, ss.dist))
+                 optimal=optimal_mask(g, ss.dist), parents=np.concatenate(parents).astype(np.int64))
+
+
+def group_parents(ss: StateSet, p: int, gp: np.ndarray) -> np.ndarray:
+    """Global index of each group's parent: the on-path state of problem ``p``
+    whose dist is one more than the group's on-path child (column 0). Every
+    member of the group is one legal step from it, which is what the
+    graph-consistency loss uses."""
+    a, b = int(ss.problem_starts[p]), int(ss.problem_starts[p + 1])
+    on = {int(ss.dist[i]): i for i in range(a, b) if ss.on_path[i]}
+    return np.array([on[int(ss.dist[row[0]]) + 1] for row in gp], dtype=np.int64)

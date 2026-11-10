@@ -3,6 +3,14 @@
 Loss per batch (a batch is all states of k problems):
 * **Huber** (delta 1) between the prediction and the true distance, averaged
   over the batch's states;
+* plus ``lambda_consistency`` times a **graph-consistency penalty** (E3,
+  default 0, i.e. off): in Isomer's symmetric unit-cost rewrite graph every
+  edge (u, v) has |d(u) - d(v)| <= 1, so for every sampled parent-child edge
+  the loss adds relu(|h(u) - h(v)| - 1)^2, averaged over the batch's edges.
+  It penalizes violations of a property every exact distance has; it does not
+  make h admissible or consistent in the A* sense.
+* ``lambda_huber`` scales the Huber term (default 1; 0 gives a ranking-only
+  model whose scale and offset are not anchored to distances);
 * plus ``lambda_rank`` times a **listwise ranking loss**, averaged over the
   batch's sibling groups (``data.derive_groups``). It is the cross-entropy
   of softmax(-pred / tau) over a group against a target distribution:
@@ -68,6 +76,8 @@ class TrainConfig:
     heads: int = 8
     max_len: int = 192
     lambda_rank: float = 1.0
+    lambda_huber: float = 1.0          # E3 ablation: 0 = ranking only
+    lambda_consistency: float = 0.0    # E3: graph-consistency penalty (off by default)
     tau: float = 1.0
     rank_target: str = "optimal"   # or "onpath"
     micro_tokens: int = 32_768
@@ -107,23 +117,44 @@ def huber_sum(pred: torch.Tensor, dist: torch.Tensor) -> torch.Tensor:
     return F.huber_loss(pred.float(), dist, reduction="sum", delta=1.0)
 
 
+def consistency_sum(pred: torch.Tensor, groups: torch.Tensor, parents: torch.Tensor) -> torch.Tensor:
+    """Sum over parent-child edges of relu(|h(parent) - h(child)| - 1)^2."""
+    if groups.numel() == 0:
+        return pred.sum() * 0.0
+    valid = groups >= 0
+    p = pred.float()
+    diff = (p[parents][:, None] - p[groups.clamp(min=0)]).abs()
+    return (F.relu(diff - 1.0) ** 2).masked_fill(~valid, 0.0).sum()
+
+
 def accumulate(model: DistanceModel, micros: list[D.Micro], device: torch.device, lambda_rank: float, tau: float,
-               target: str) -> tuple[float, float]:
+               target: str, lambda_huber: float = 1.0, lambda_consistency: float = 0.0,
+               stats: dict | None = None) -> tuple[float, float]:
     """Backward over one batch given as micro-batches; returns (huber, rank).
-    Both are normalized by the WHOLE batch's state and group counts, so the
-    gradient does not depend on how the batch was split."""
+    All terms are normalized by the WHOLE batch's state, group and edge counts,
+    so the gradient does not depend on how the batch was split. With the
+    defaults (lambda_huber 1, lambda_consistency 0) the loss is exactly the
+    published h-v1 objective. ``stats`` (optional) receives the consistency term."""
     n_states = sum(len(m.dist) for m in micros)
     n_groups = max(1, sum(len(m.groups) for m in micros))
-    hub = rank = 0.0
+    n_edges = max(1, sum(int((m.groups >= 0).sum()) for m in micros))
+    hub = rank = cons = 0.0
     for m in micros:
         ids, dist, groups, optimal = _to(m, device)
         with _autocast(device):
             pred = model(ids)
         h = huber_sum(pred, dist) / n_states
         r = ranking_loss_sum(pred, groups, optimal, tau, target) / n_groups
-        (h + lambda_rank * r).backward()
+        loss = lambda_huber * h + lambda_rank * r
+        if lambda_consistency:
+            c = consistency_sum(pred, groups, torch.from_numpy(m.parents).to(device)) / n_edges
+            loss = loss + lambda_consistency * c
+            cons += c.item()
+        loss.backward()
         hub += h.item()
         rank += r.item()
+    if stats is not None:
+        stats["consistency"] = cons
     return hub, rank
 
 
@@ -261,21 +292,25 @@ def train(cfg: TrainConfig, progress: bool = True) -> dict:
         if device.type == "cuda":
             torch.cuda.reset_peak_memory_stats(device)
         te = time.perf_counter()
-        sums = {"loss": 0.0, "huber": 0.0, "rank": 0.0}
+        sums = {"loss": 0.0, "huber": 0.0, "rank": 0.0, "consistency": 0.0}
         n_steps = 0
         for batch in D.epoch_batches(train_ss.n_problems, cfg.batch_problems, cfg.seed, epoch):
             micros = [D.collate(train_ss, mb) for mb in D.micro_batches(train_ss, batch, cfg.micro_tokens)]
             opt.zero_grad(set_to_none=True)
-            hub, rank = accumulate(model, micros, device, cfg.lambda_rank, cfg.tau, cfg.rank_target)
+            cstat: dict = {}
+            hub, rank = accumulate(model, micros, device, cfg.lambda_rank, cfg.tau, cfg.rank_target,
+                                   cfg.lambda_huber, cfg.lambda_consistency, cstat)
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip)
             opt.step()
             sched.step()
             step += 1
             n_steps += 1
+            batch_loss = cfg.lambda_huber * hub + cfg.lambda_rank * rank + cfg.lambda_consistency * cstat["consistency"]
             sums["huber"] += hub
             sums["rank"] += rank
-            sums["loss"] += hub + cfg.lambda_rank * rank
-            history.append(hub + cfg.lambda_rank * rank)
+            sums["consistency"] += cstat["consistency"]
+            sums["loss"] += batch_loss
+            history.append(batch_loss)
             if progress and step % cfg.log_every == 0:
                 log(f"  step {step}/{total}  loss {history[-1]:.4f}  huber {hub:.4f}  rank {rank:.4f}  "
                     f"lr {sched.get_last_lr()[0]:.2e}  {n_steps / (time.perf_counter() - te):.2f} steps/s")
