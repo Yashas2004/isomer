@@ -186,14 +186,8 @@ def test_score_script_refuses_unknown_models_and_incomplete_labels(tmp_path, cap
     # an E3 directory with a sample but no labels: refused before any model is loaded
     (tmp_path / "data").mkdir()
     _jsonl(tmp_path / "data" / "test_id.jsonl", [_rec("aa", 2)])
-    monkey = dict(seeds.MODELS)
-    try:
-        seeds.MODELS.clear()
-        seeds.MODELS["tiny"] = Path(__file__).relative_to(ROOT).as_posix()   # any existing file
-        assert mod.main(["--models", "tiny", "--splits", "test_id", "--e3", str(tmp_path)]) == 2
-    finally:
-        seeds.MODELS.clear()
-        seeds.MODELS.update(monkey)
+    tiny = "tiny=" + Path(__file__).relative_to(ROOT).as_posix()          # any existing file as checkpoint
+    assert mod.main(["--models", tiny, "--splits", "test_id", "--e3", str(tmp_path)]) == 2
     assert "0/1 problems labelled" in capsys.readouterr().err
 
 # ---------------------------------------------------------------------------------- model lists (E3-d6)
@@ -214,3 +208,12 @@ def test_scripts_accept_a_named_checkpoint(capsys):
     line, = capsys.readouterr().out.strip().splitlines()
     assert "neural-w1@runs/h-d6-s0/best.pt#bf16-fast" in line
     assert line.endswith("--out runs/e3/bench-seeds/h-d6-s0")
+
+
+def test_d6_family_names_resolve():
+    got = seeds.parse_models("h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0")
+    assert got == {"h-d6-s0": "runs/h-d6-s0/best.pt", "h-d6-s1": "runs/h-d6-s1/best.pt",
+                   "h-d6-s2": "runs/h-d6-s2/best.pt", "h-d6m-s0": "runs/h-d6m-s0/best.pt"}
+    assert seeds.parse_models(None) == seeds.MODELS              # the default stays the three h-v1 seeds
+    with pytest.raises(seeds.SeedsError):
+        seeds.parse_models("h-d6m-s0=runs/elsewhere/best.pt")    # a known name cannot point somewhere else

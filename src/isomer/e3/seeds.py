@@ -26,6 +26,10 @@ import sys
 from pathlib import Path
 
 MODELS = {"h-v1": "runs/h-v1/best.pt", "h-v1-s1": "runs/h-v1-s1/best.pt", "h-v1-s2": "runs/h-v1-s2/best.pt"}
+# E3-d6: the same configuration on deeper training data (seeds 0-2) and its size-matched control.
+D6_MODELS = {"h-d6-s0": "runs/h-d6-s0/best.pt", "h-d6-s1": "runs/h-d6-s1/best.pt",
+             "h-d6-s2": "runs/h-d6-s2/best.pt", "h-d6m-s0": "runs/h-d6m-s0/best.pt"}
+KNOWN = {**MODELS, **D6_MODELS}      # names that can be given without a checkpoint
 SPLITS = ("test_id", "test_depth")
 BUDGETS = (30, 100, 300, 1000)
 DATA = "data/isobench-v2"
@@ -38,8 +42,8 @@ class SeedsError(Exception):
 
 
 def parse_models(spec: str | None) -> dict[str, str]:
-    """``"h-v1,h-d6-s0=runs/h-d6-s0/best.pt"`` -> {name: checkpoint}. A bare name must be one of
-    ``MODELS``; ``name=checkpoint`` adds a model without editing this file. None = all of ``MODELS``."""
+    """``"h-v1,h-d6-s0,x=runs/x/best.pt"`` -> {name: checkpoint}. A bare name must be one of
+    ``KNOWN``; ``name=checkpoint`` adds a model without editing this file. None = all of ``MODELS``."""
     if spec is None:
         return dict(MODELS)
     out: dict[str, str] = {}
@@ -48,15 +52,15 @@ def parse_models(spec: str | None) -> dict[str, str]:
             continue
         name, sep, ckpt = item.partition("=")
         if not sep:
-            if name not in MODELS:
-                raise SeedsError(f"unknown model {name!r}; known: {', '.join(MODELS)} (or give NAME=CHECKPOINT)")
-            ckpt = MODELS[name]
+            if name not in KNOWN:
+                raise SeedsError(f"unknown model {name!r}; known: {', '.join(KNOWN)} (or give NAME=CHECKPOINT)")
+            ckpt = KNOWN[name]
         if not name or not ckpt or any(c in name for c in "/\\ "):
             raise SeedsError(f"bad model {item!r}; expected NAME or NAME=CHECKPOINT")
         if name in out:
             raise SeedsError(f"model {name!r} is listed twice")
-        if name in MODELS and Path(ckpt).as_posix() != MODELS[name]:
-            raise SeedsError(f"{name!r} is the published name of {MODELS[name]}; pick another name for {ckpt}")
+        if name in KNOWN and Path(ckpt).as_posix() != KNOWN[name]:
+            raise SeedsError(f"{name!r} is the name of {KNOWN[name]}; pick another name for {ckpt}")
         out[name] = Path(ckpt).as_posix()
     if not out:
         raise SeedsError("no models given")

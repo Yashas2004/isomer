@@ -266,3 +266,64 @@ def test_render_comparison(tmp_path):
     assert C.render(e3, base, "d6", "runs/d6/best.pt", prediction_commit="abc1234") == text
     with pytest.raises(seeds.SeedsError):
         C.render(e3, base, "m0", "runs/m0/best.pt")
+
+
+# ---------------------------------------------------------------------------------- d6 family and matched control
+
+def test_matched_rules_are_the_committed_prediction():
+    from pathlib import Path
+
+    assert C.MATCHED_RULES == (("mean prediction", "mean_h", 7, 5.7, 5.0),
+                               ("mean prediction", "mean_h", 8, 5.7, 5.0),
+                               ("drop to the optimal child", "drop", 7, 0.35, 0.20),
+                               ("drop to the optimal child", "drop", 8, 0.18, 0.10),
+                               ("all-children top-1, all scored states", "top1", None, 0.90, 0.85))
+    # the first four rows are the thresholds of the original d6 prediction, unchanged
+    assert [r[3:] for r in C.MATCHED_RULES[:4]] == [p[4:] for p in C.PREDICTIONS]
+    text = (Path(__file__).resolve().parent.parent / "docs/experiments/E3/d6_matched_prediction.md").read_text("utf-8")
+    for _, _, _, depth, volume in C.MATCHED_RULES:
+        assert f">= {depth}" in text and f"<= {volume}" in text
+
+
+def test_judge_matched_boundaries():
+    assert C.judge_matched(0.90, 0.90, 0.85) == "depth" and C.judge_matched(0.899, 0.90, 0.85) == "between"
+    assert C.judge_matched(0.85, 0.90, 0.85) == "volume" and C.judge_matched(0.851, 0.90, 0.85) == "between"
+
+
+def test_evaluate_matched():
+    ev = C.evaluate_matched(_shifted(), 0.95)
+    assert ev["overall"] == "depth" and [r["verdict"] for r in ev["rows"]] == ["depth"] * 5
+    ev = C.evaluate_matched(_saturating(), 0.72)                 # behaves like the baseline
+    assert ev["overall"] == "volume" and {r["verdict"] for r in ev["rows"]} == {"volume"}
+    ev = C.evaluate_matched(_shifted(), 0.87)                    # keeps the distance scale, loses half the accuracy
+    assert ev["overall"] == "mixed" and [r["verdict"] for r in ev["rows"]] == ["depth"] * 4 + ["between"]
+    assert ev["rows"][4]["value"] == 0.87 and ev["rows"][4]["k"] is None
+
+
+def test_render_family(tmp_path):
+    other = _shifted()
+    other[7] = _row(124, 6.0, 0.5, -0.3, top1=0.8)
+    tables = {"b0": _saturating(), "b1": _saturating(), "d0": _shifted(), "d1": other, "dm": _shifted()}
+    e3 = _fake_e3(tmp_path, tables)
+    scores = [{"problem_id": p, "dist": k, "h_state": tables["dm"][k]["mean_h"],
+               "h_children": [tables["dm"][k]["mean_h"] - tables["dm"][k]["drop"]], "optimal": [True]}
+              for k in (7, 8) for p in "ab"]
+    seeds.score_paths(e3 / "scores" / "dm", "test_depth")["scores"].write_text(
+        "".join(json.dumps(r) + "\n" for r in scores), encoding="utf-8")
+    base = {"b0": "runs/b0/best.pt", "b1": "runs/b1/best.pt"}
+    d6 = {"d0": "runs/d0/best.pt", "d1": "runs/d1/best.pt"}
+    text = C.render_family(e3, base, d6, "dm", "runs/dm/best.pt", prediction_commit="abc1234")
+    # the fake overall top-1 is 0.7 for every model: four rows say depth, the top-1 row says volume
+    assert "**The result is mixed: see the rows below.**" in text
+    assert "committed as `abc1234`" in text
+    assert "| mean prediction, k = 7 | 4.690 to 4.690 | 6.000 to 6.200 | 6.200 (6.200 to 6.200) | >= 5.7 / <= 5.0 | depth |" in text
+    assert "| all-children top-1, all scored states | 0.700 to 0.700 | 0.700 to 0.700 | 0.700 (0.600 to 0.800) | >= 0.9 / <= 0.85 | volume |" in text
+    # each d6 seed is judged by the original prediction
+    assert "| d0 | 6.200 (supported) | 6.500 (supported) | 0.600 (supported) | 0.300 (supported) | 6.700 (holds) | supported |" in text
+    assert "| d1 | 6.000 (supported) |" in text
+    # per-distance row: baseline mean and range, d6 mean and range, control
+    assert "| 7 | 124 | 4.690 | 4.690 to 4.690 | 6.100 | 6.000 to 6.200 | 6.200 |" in text
+    assert "| 7 | 124 | 0.700 | 0.700 to 0.700 | 0.750 | 0.700 to 0.800 | 0.700 |" in text       # top-1
+    assert C.render_family(e3, base, d6, "dm", "runs/dm/best.pt", prediction_commit="abc1234") == text
+    with pytest.raises(seeds.SeedsError):
+        C.render_family(e3, base, d6, "d0", "runs/d0/best.pt")

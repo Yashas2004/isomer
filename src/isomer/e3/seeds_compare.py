@@ -223,3 +223,186 @@ def write(e3: str | Path, out: str | Path, baseline: dict[str, str], new_name: s
           prediction_commit: str | None = None) -> Path:
     Path(out).write_text(render(e3, baseline, new_name, new_ckpt, prediction_commit), encoding="utf-8", newline="\n")
     return Path(out)
+
+
+# ---------------------------------------------------------------------------------- d6 family and matched control
+
+# Decision rules of docs/experiments/E3/d6_matched_prediction.md, committed before the control was trained.
+# (quantity, key, distance k or None for all scored test_depth states, "depth" if >=, "volume" if <=)
+MATCHED_RULES = (
+    ("mean prediction", "mean_h", 7, 5.7, 5.0),
+    ("mean prediction", "mean_h", 8, 5.7, 5.0),
+    ("drop to the optimal child", "drop", 7, 0.35, 0.20),
+    ("drop to the optimal child", "drop", 8, 0.18, 0.10),
+    ("all-children top-1, all scored states", "top1", None, 0.90, 0.85),
+)
+
+
+def judge_matched(value: float, depth_ge: float, volume_le: float) -> str:
+    if value >= depth_ge:
+        return "depth"
+    if value <= volume_le:
+        return "volume"
+    return "between"
+
+
+def evaluate_matched(table: dict[int, dict], overall_top1: float) -> dict:
+    """Apply the pre-registered rules to the size-matched model."""
+    rows = []
+    for name, key, k, depth, volume in MATCHED_RULES:
+        value = overall_top1 if k is None else table[k][key]
+        rows.append({"quantity": name, "key": key, "k": k, "depth_ge": depth, "volume_le": volume, "value": value,
+                     "verdict": judge_matched(value, depth, volume)})
+    verdicts = {r["verdict"] for r in rows}
+    overall = "depth" if verdicts == {"depth"} else "volume" if verdicts == {"volume"} else "mixed"
+    return {"rows": rows, "overall": overall}
+
+
+def _range(values: list[float], nd: int = 3) -> str:
+    return S._f(values[0], nd) if len(values) == 1 else f"{S._f(min(values), nd)} to {S._f(max(values), nd)}"
+
+
+def family_table(groups: dict[str, dict[str, dict[int, dict]]], single: tuple[str, dict[int, dict]], key: str) -> str:
+    """Per distance: mean and range of each group of seeds, and the single control model."""
+    name, table = single
+    head = ["k", "states"]
+    for g in groups:
+        head += [f"{g} mean", f"{g} range"]
+    rows = []
+    for k, ref in table.items():
+        row = [f"{k}" + ("" if ref["states"] >= S.MIN_STATES else " \\*"), str(ref["states"])]
+        for tables in groups.values():
+            vals = [t[k][key] for t in tables.values()]
+            row += ["–", "–"] if any(v is None for v in vals) else [S._f(S.stat(vals)[0]), _range(vals)]
+        rows.append([*row, S._f(ref[key])])
+    return S._table([*head, name], rows)
+
+
+def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], matched_name: str,
+                  matched_ckpt: str, prediction_commit: str | None = None) -> str:
+    e3 = Path(e3)
+    names = [*baseline, *d6, matched_name]
+    if len(set(names)) != len(names):
+        raise seeds.SeedsError("a model is listed in two groups")
+    tables, overall, _, labels, bench, _, bsum = S.load(e3, names)
+    td = tables["test_depth"]
+    groups = {"baseline": {m: td[m] for m in baseline}, "d6": {m: td[m] for m in d6}}
+    top1 = {sp: {m: overall[sp][m]["overall"]["h"] for m in names} for sp in tables}
+    ev = evaluate_matched(td[matched_name], top1["test_depth"][matched_name]["top1_optimal"])
+    ci = bootstrap_cis(S._jsonl(seeds.score_paths(e3 / "scores" / matched_name, "test_depth")["scores"]))
+    lab = labels["test_depth"]
+
+    out = ["# E3-d6: depth coverage or data volume? Seeds and the size-matched control", "",
+           (f"Baseline: {', '.join(baseline)} (train problems up to distance 4). d6: {', '.join(d6)} (up to "
+            f"distance 6, more problems). Control: `{matched_name}`, trained on a seeded random subset of the d6 "
+            "train problems with as many problems as the baseline had. All models have the h-v1 configuration and "
+            f"are scored on the same labelled test_depth states "
+            f"({overall['test_depth'][matched_name]['overall']['states']} scored, {lab['unknown']} unknown and "
+            "excluded) and searched on the same 300 problems."), "",
+           ("The control's decision rules are in `docs/experiments/E3/d6_matched_prediction.md`"
+            + (f", committed as `{prediction_commit}`" if prediction_commit else "")
+            + " before the control was trained."), "",
+           "## Control verdict", ""]
+    word = {"depth": "**Depth coverage is supported on every pre-registered quantity: the size-matched model "
+                     "keeps the d6 behaviour.**",
+            "volume": "**Data volume is supported on every pre-registered quantity: the size-matched model falls "
+                      "back toward the baseline.**",
+            "mixed": "**The result is mixed: see the rows below.**"}[ev["overall"]]
+    out += [word, ""]
+    rows = []
+    for r in ev["rows"]:
+        if r["k"] is None:
+            base = [top1["test_depth"][m]["top1_optimal"] for m in baseline]
+            deep = [top1["test_depth"][m]["top1_optimal"] for m in d6]
+            lo, hi = top1["test_depth"][matched_name]["top1_ci95"]
+            label = r["quantity"]
+        else:
+            base = [td[m][r["k"]][r["key"]] for m in baseline]
+            deep = [td[m][r["k"]][r["key"]] for m in d6]
+            lo, hi = ci[(r["key"], r["k"])]
+            label = f"{r['quantity']}, k = {r['k']}"
+        rows.append([label, _range(base), _range(deep), f"{S._f(r['value'])} ({S._f(lo)} to {S._f(hi)})",
+                     f">= {r['depth_ge']} / <= {r['volume_le']}", r["verdict"]])
+    out += [S._table(["quantity (test_depth)", f"baseline range ({len(baseline)} seeds)",
+                      f"d6 range ({len(d6)} seeds)", f"{matched_name} (95% CI)", "depth / volume if", "verdict"],
+                     rows), "",
+            ("The interval is a cluster bootstrap over problems within the one control model; seed-to-seed "
+             "variation is shown by the two ranges."), ""]
+
+    # ---- each d6 seed against the original prediction
+    base_td = groups["baseline"]
+    rows = []
+    for m in d6:
+        e = evaluate(td[m], base_td)
+        rows.append([m, *[f"{S._f(r['value'])} ({r['verdict']})" for r in e["rows"]],
+                     f"{S._f(e['plateau']['max_mean_h'])} ({'holds' if e['plateau']['holds'] else 'does not hold'})",
+                     e["overall"]])
+    out += ["## Each d6 seed against the original prediction (`d6_prediction.md`)", "",
+            S._table(["model", *[f"{n}, k = {k}" for n, _, k, _, _, _ in PREDICTIONS],
+                      f"highest mean prediction at k >= {PLATEAU_FROM}", "overall"], rows), ""]
+
+    # ---- per-distance tables
+    out += ["## test_depth, by true distance of the state", "",
+            f"Rows marked \\* have fewer than {S.MIN_STATES} scored states.", ""]
+    for title, key in (("Mean prediction", "mean_h"), ("Drop to the optimal child", "drop"),
+                       ("All-children top-1", "top1"), ("Margin", "margin"), ("Edge-violation rate", "violation")):
+        out += [f"### {title}", "", family_table(groups, (matched_name, td[matched_name]), key), ""]
+    rows = [[m, *[f"{S._f(top1[sp][m]['top1_optimal'])} ({S._f(top1[sp][m]['top1_ci95'][0])} to "
+                  f"{S._f(top1[sp][m]['top1_ci95'][1])})" for sp in ("test_depth", "test_id")]] for m in names]
+    out += ["## All-children top-1, all scored states (95% CI: cluster bootstrap over problems)", "",
+            S._table(["model", "test_depth", "test_id"], rows), ""]
+    ti = tables["test_id"]
+    out += ["### test_id, by true distance of the state", "",
+            family_table({"baseline": {m: ti[m] for m in baseline}, "d6": {m: ti[m] for m in d6}},
+                         (matched_name, ti[matched_name]), "top1"), ""]
+
+    # ---- search
+    rows = []
+    for b in seeds.BUDGETS:
+        row = [str(b)]
+        for g in (baseline, d6):
+            rates = [100 * bsum[m]["budgets"][b]["rate"] for m in g]
+            row += [f"{S.stat(rates)[0]:.1f}%", " to ".join(f"{x:.1f}%" for x in (min(rates), max(rates)))]
+        c = bsum[matched_name]["budgets"][b]
+        rows.append([*row, f"{c['solved']}/{c['n']} = {100 * c['rate']:.1f}%"])
+    by = {m: solved_by_dist(bench[m]) for m in names}
+    rows2 = []
+    top = max(seeds.BUDGETS)
+    for d, cellv in by[matched_name].items():
+        rows2.append([str(d), str(cellv["n"]), *[_range([float(by[m][d][b]) for m in g], 0)
+                                                 for b in (min(seeds.BUDGETS), top) for g in (baseline, d6)],
+                      str(cellv[min(seeds.BUDGETS)]), str(cellv[top])])
+    lo_b = min(seeds.BUDGETS)
+    bad = {m: {k: c for k, c in bsum[m]["status"].items() if k != "ok"} for m in names}
+    out += ["## Search: neural-w1 on the 300 test_depth problems (exploratory)", "",
+            "Solved means the kernel accepted the proof.", "",
+            S._table(["expansions", "baseline mean", "baseline range", "d6 mean", "d6 range", matched_name], rows),
+            "", "Problems solved, by exact distance of the problem (ranges over seeds):", "",
+            S._table(["problem distance", "problems", f"baseline @{lo_b}", f"d6 @{lo_b}", f"baseline @{top}",
+                      f"d6 @{top}", f"{matched_name} @{lo_b}", f"{matched_name} @{top}"], rows2), "",
+            "Rows with status other than ok: " + ("none" if not any(bad.values()) else json.dumps(bad)) + ".", ""]
+
+    facts = {m: _train_facts(c) for m, c in {**baseline, **d6, matched_name: matched_ckpt}.items()}
+    if all(facts.values()):
+        out += ["## Training runs", "",
+                S._table(["model", "states directory", "seed", "train problems", "train states", "optimizer steps"],
+                         [[m, f"`{f['states_dir']}`", str(f["seed"]), str(f["train_problems"]),
+                           str(f["train_states"]), str(f["total_steps"])] for m, f in facts.items()]), ""]
+    out += ["## What this does and does not control", "",
+            ("- **Matched:** the number of train problems and of optimizer steps (the trainer batches by problem). "
+             "**Not matched:** the number of training states; the control's problems are deeper than the "
+             "baseline's and have more states each (table above)."),
+            ("- The control is one seed and one random subset. The d6 range shows how much a seed alone moves "
+             "each quantity."),
+            ("- The control tests volume against depth coverage of the *training problems*. It does not separate "
+             "the deeper problems from the thin tail of distance-7 off-path states they bring."),
+            ("- Diagnostics use on-path states of one stored shortest proof; unknown states are excluded for "
+             "every model alike. Search results are exploratory."), ""]
+    return "\n".join(out)
+
+
+def write_family(e3: str | Path, out: str | Path, baseline: dict[str, str], d6: dict[str, str], matched_name: str,
+                 matched_ckpt: str, prediction_commit: str | None = None) -> Path:
+    Path(out).write_text(render_family(e3, baseline, d6, matched_name, matched_ckpt, prediction_commit),
+                         encoding="utf-8", newline="\n")
+    return Path(out)
