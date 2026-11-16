@@ -28,7 +28,8 @@ def main(argv: list[str] | None = None) -> int:
     from isomer.e3 import seeds
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--models", default=",".join(seeds.MODELS))
+    ap.add_argument("--models", default=None,
+                    help="comma-separated NAME or NAME=CHECKPOINT (default: the three h-v1 seeds)")
     ap.add_argument("--splits", default="test_depth,test_id")
     ap.add_argument("--e3", default="runs/e3", help="directory holding data/ and labels/; scores/ is written here")
     ap.add_argument("--device", default="cuda")
@@ -36,15 +37,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--redo", action="store_true")
     a = ap.parse_args(argv)
     e3 = ROOT / a.e3
-    models = [m for m in a.models.split(",") if m]
     splits = [s for s in a.splits.split(",") if s]
     try:
-        unknown = [m for m in models if m not in seeds.MODELS]
-        if unknown:
-            raise seeds.SeedsError(f"unknown model(s) {unknown}; known: {', '.join(seeds.MODELS)}")
-        for m in models:        # everything is checked before the first model is loaded
-            if not (ROOT / seeds.MODELS[m]).is_file():
-                raise seeds.SeedsError(f"checkpoint {seeds.MODELS[m]} not found")
+        models = seeds.parse_models(a.models)
+        for ckpt in models.values():        # everything is checked before the first model is loaded
+            if not (ROOT / ckpt).is_file():
+                raise seeds.SeedsError(f"checkpoint {ckpt} not found")
         for split in splits:
             st = seeds.require_complete(e3 / "data" / f"{split}.jsonl", e3 / "labels" / f"{split}.jsonl")
             print(f"== {split}: {st['labelled']} problems, {st['states']} states "
@@ -54,9 +52,9 @@ def main(argv: list[str] | None = None) -> int:
             if not torch.cuda.is_available():
                 raise seeds.SeedsError("--device cuda but CUDA is not available")
         summary = []
-        for m in models:
+        for m, ckpt in models.items():
             for split in splits:
-                res = seeds.score_and_analyze(m, ROOT / seeds.MODELS[m], split, e3 / "labels" / f"{split}.jsonl",
+                res = seeds.score_and_analyze(m, ROOT / ckpt, split, e3 / "labels" / f"{split}.jsonl",
                                               e3 / "scores" / m, a.device, a.precision, a.redo)
                 summary.append(res)
                 peak = res["max_memory_allocated"]
@@ -66,7 +64,12 @@ def main(argv: list[str] | None = None) -> int:
     except seeds.SeedsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    (e3 / "scores" / "index.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    # index.json lists every model scored so far: entries of models not in this call are kept
+    index = e3 / "scores" / "index.json"
+    done = {(r["model"], r["split"]) for r in summary}
+    old = json.loads(index.read_text(encoding="utf-8")) if index.exists() else []
+    merged = [r for r in old if (r["model"], r["split"]) not in done] + summary
+    index.write_text(json.dumps(merged, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return 0
 
 

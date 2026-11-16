@@ -51,24 +51,25 @@ def main(argv: list[str] | None = None) -> int:
     from isomer.e3 import seeds
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--models", default=",".join(seeds.MODELS))
+    ap.add_argument("--models", default=None,
+                    help="comma-separated NAME or NAME=CHECKPOINT (default: the three h-v1 seeds)")
     ap.add_argument("--out", default="runs/e3/bench-seeds")
     ap.add_argument("--workers", type=int, default=2, help="as in E2; each holds its own CUDA context")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
-    models = [m for m in a.models.split(",") if m]
-    unknown = [m for m in models if m not in seeds.MODELS]
-    if unknown:
-        print(f"error: unknown model(s) {unknown}; known: {', '.join(seeds.MODELS)}", file=sys.stderr)
+    try:
+        models = seeds.parse_models(a.models)
+    except seeds.SeedsError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
-    plan = [(m, seeds.bench_command(seeds.MODELS[m], f"{a.out}/{m}", workers=a.workers)) for m in models]
+    plan = [(m, seeds.bench_command(ckpt, f"{a.out}/{m}", workers=a.workers)) for m, ckpt in models.items()]
     if a.dry_run:
         for _, cmd in plan:
             print(subprocess.list2cmdline(cmd))
         return 0
-    for m in models:
-        if not (ROOT / seeds.MODELS[m]).is_file():
-            print(f"error: checkpoint {seeds.MODELS[m]} not found", file=sys.stderr)
+    for ckpt in models.values():
+        if not (ROOT / ckpt).is_file():
+            print(f"error: checkpoint {ckpt} not found", file=sys.stderr)
             return 2
     (ROOT / a.out).mkdir(parents=True, exist_ok=True)
     for m, cmd in plan:

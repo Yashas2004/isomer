@@ -46,6 +46,7 @@ PER_RUN = {"seed", "out", "argv", "overwrite", "log_every"}
 # losses added after h-v1 (E3); h-v1 is these values (tests/test_train_e3.py: same gradient)
 E3_FLAGS = {"--lambda-huber": 1.0, "--lambda-consistency": 0.0}
 VRAM_LIMIT = 4 * 2**30      # CLAUDE.md: GPU code must fit a 4 GB card
+DEFAULT_PREFIX = "h-v1-s"
 
 
 class ConfigDrift(Exception):
@@ -130,16 +131,26 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--seeds", default="1,2", help="comma-separated seeds, trained in this order")
     ap.add_argument("--runs", default="runs", help="parent directory of the run directories")
-    ap.add_argument("--prefix", default="h-v1-s", help="run directory is RUNS/PREFIX<seed>")
+    ap.add_argument("--prefix", default=DEFAULT_PREFIX, help="run directory is RUNS/PREFIX<seed>")
+    ap.add_argument("--states", default=None,
+                    help="train on another states directory (e.g. data/states-v2-d6); every other argument "
+                         "stays h-v1's. Needs its own --prefix")
     ap.add_argument("--overwrite", action="store_true", help="replace half-finished run directories")
     ap.add_argument("--dry-run", action="store_true", help="print the commands and exit")
     a = ap.parse_args(argv)
     seeds = [int(s) for s in a.seeds.split(",") if s.strip()]
 
     args = base_args()
-    if 0 in seeds or args["seed"] in seeds:
-        print(f"error: seed {args['seed']} is h-v1 itself", file=sys.stderr)
+    same_data = a.states is None or Path(a.states).as_posix() == Path(args["states"]).as_posix()
+    if same_data and args["seed"] in seeds:
+        print(f"error: seed {args['seed']} on {args['states']} is h-v1 itself", file=sys.stderr)
         return 2
+    if not same_data:
+        if a.prefix == DEFAULT_PREFIX:
+            print(f"error: --states {a.states} is not h-v1's training data; give the runs another --prefix",
+                  file=sys.stderr)
+            return 2
+        args = dict(args, states=Path(a.states).as_posix())     # the only argument that may differ from h-v1
     try:
         from dataclasses import asdict
 
@@ -192,8 +203,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"warning: seed {seed} peaked above 4 GiB; it would not fit the reference 4 GB card",
                   file=sys.stderr)
 
-    out = ROOT / runs / "train_seeds.json"
-    out.write_text(json.dumps({"base_config": BASE_CONFIG.relative_to(ROOT).as_posix(), "runs": summary},
+    # one summary file per run family, so a d6 run does not overwrite the h-v1 seeds' summary
+    out = ROOT / runs / ("train_seeds.json" if a.prefix == DEFAULT_PREFIX else f"train_seeds_{a.prefix.strip('-')}.json")
+    out.write_text(json.dumps({"base_config": BASE_CONFIG.relative_to(ROOT).as_posix(), "states": args["states"],
+                               "runs": summary},
                               indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {out.relative_to(ROOT).as_posix()}", flush=True)
     return status

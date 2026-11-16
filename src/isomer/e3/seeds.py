@@ -37,6 +37,32 @@ class SeedsError(Exception):
     """A user-facing error: missing input, incomplete labels, a sample that does not match."""
 
 
+def parse_models(spec: str | None) -> dict[str, str]:
+    """``"h-v1,h-d6-s0=runs/h-d6-s0/best.pt"`` -> {name: checkpoint}. A bare name must be one of
+    ``MODELS``; ``name=checkpoint`` adds a model without editing this file. None = all of ``MODELS``."""
+    if spec is None:
+        return dict(MODELS)
+    out: dict[str, str] = {}
+    for item in (s.strip() for s in spec.split(",")):
+        if not item:
+            continue
+        name, sep, ckpt = item.partition("=")
+        if not sep:
+            if name not in MODELS:
+                raise SeedsError(f"unknown model {name!r}; known: {', '.join(MODELS)} (or give NAME=CHECKPOINT)")
+            ckpt = MODELS[name]
+        if not name or not ckpt or any(c in name for c in "/\\ "):
+            raise SeedsError(f"bad model {item!r}; expected NAME or NAME=CHECKPOINT")
+        if name in out:
+            raise SeedsError(f"model {name!r} is listed twice")
+        if name in MODELS and Path(ckpt).as_posix() != MODELS[name]:
+            raise SeedsError(f"{name!r} is the published name of {MODELS[name]}; pick another name for {ckpt}")
+        out[name] = Path(ckpt).as_posix()
+    if not out:
+        raise SeedsError("no models given")
+    return out
+
+
 def sha256(path: str | Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 

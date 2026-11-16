@@ -195,3 +195,22 @@ def test_score_script_refuses_unknown_models_and_incomplete_labels(tmp_path, cap
         seeds.MODELS.clear()
         seeds.MODELS.update(monkey)
     assert "0/1 problems labelled" in capsys.readouterr().err
+
+# ---------------------------------------------------------------------------------- model lists (E3-d6)
+
+def test_parse_models():
+    assert seeds.parse_models(None) == seeds.MODELS
+    assert seeds.parse_models("h-v1-s1") == {"h-v1-s1": "runs/h-v1-s1/best.pt"}
+    got = seeds.parse_models("h-v1, h-d6-s0=runs\\h-d6-s0\\best.pt")
+    assert got == {"h-v1": "runs/h-v1/best.pt", "h-d6-s0": "runs/h-d6-s0/best.pt"}
+    assert list(got) == ["h-v1", "h-d6-s0"]                 # order is kept: it is the column order
+    for bad in ("nope", "a=", "=x.pt", "h-v1,h-v1", "", "a b=x.pt", "h-v1=runs/other/best.pt"):
+        with pytest.raises(seeds.SeedsError):
+            seeds.parse_models(bad)
+
+
+def test_scripts_accept_a_named_checkpoint(capsys):
+    assert _script("e3_bench_seeds").main(["--dry-run", "--models", "h-d6-s0=runs/h-d6-s0/best.pt"]) == 0
+    line, = capsys.readouterr().out.strip().splitlines()
+    assert "neural-w1@runs/h-d6-s0/best.pt#bf16-fast" in line
+    assert line.endswith("--out runs/e3/bench-seeds/h-d6-s0")

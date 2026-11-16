@@ -170,13 +170,10 @@ def _verdict_sentence(name: str, per_model: dict[str, dict], key: str) -> str:
     return f"**{name} does NOT appear in every model: it fails the rule for {', '.join(missing)}.**"
 
 
-def render(e3: str | Path, models: dict[str, str] | None = None, e2_run: str | Path | None = None) -> str:
-    e3 = Path(e3)
-    models = dict(models or seeds.MODELS)
-    names = list(models)
-    out: list[str] = ["# E3 seed study: h-v1 and two reseeded runs", ""]
-
-    # ---- inputs
+def load(e3: Path, names: list[str]) -> tuple[dict, dict, dict, dict, dict, dict, dict]:
+    """Everything the summaries read, for ``names``: per-distance tables, full analyses, score
+    metadata and label statistics per split, then bench rows, bench configs and bench summaries
+    per model. Refuses incomplete labels and scores made on another label file or population."""
     tables: dict[str, dict[str, dict[int, dict]]] = {}
     overall: dict[str, dict[str, dict]] = {}
     metas: dict[str, dict[str, dict]] = {}
@@ -197,6 +194,15 @@ def render(e3: str | Path, models: dict[str, str] | None = None, e2_run: str | P
     bench = {m: _jsonl(e3 / "bench-seeds" / m / "results.jsonl") for m in names}
     bcfg = {m: json.loads((e3 / "bench-seeds" / m / "config.json").read_text(encoding="utf-8")) for m in names}
     bsum = {m: bench_summary(bench[m]) for m in names}
+    return tables, overall, metas, labels, bench, bcfg, bsum
+
+
+def render(e3: str | Path, models: dict[str, str] | None = None, e2_run: str | Path | None = None) -> str:
+    e3 = Path(e3)
+    models = dict(models or seeds.MODELS)
+    names = list(models)
+    out: list[str] = ["# E3 seed study: h-v1 and two reseeded runs", ""]
+    tables, overall, metas, labels, bench, bcfg, bsum = load(e3, names)
 
     td, lab = tables["test_depth"], labels["test_depth"]
     v = {m: verdicts(td[m]) for m in names}

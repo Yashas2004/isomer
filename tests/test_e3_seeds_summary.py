@@ -176,3 +176,93 @@ def test_render_refuses_scores_of_another_label_file(tmp_path):
         f.write("\n")                                                   # labels changed after scoring
     with pytest.raises(seeds.SeedsError, match="another label file"):
         S.render(e3, models)
+
+
+# ---------------------------------------------------------------------------------- E3-d6 comparison
+
+from isomer.e3 import seeds_compare as C
+
+
+def _shifted():
+    """What the prediction expects of a d6 model: the saturating curve moved by two distances."""
+    t = _saturating()
+    t[7] = _row(124, 6.2, 0.6, -0.4)
+    t[8] = _row(64, 6.5, 0.3, -0.2)
+    t[9] = _row(15, 6.7, 0.1, -0.2)
+    return t
+
+
+def test_rules_are_the_committed_prediction():
+    assert C.PREDICTIONS == (("mean prediction", "mean_h", 7, 6.2, 5.7, 5.0),
+                             ("mean prediction", "mean_h", 8, 6.5, 5.7, 5.0),
+                             ("drop to the optimal child", "drop", 7, 0.6, 0.35, 0.20),
+                             ("drop to the optimal child", "drop", 8, 0.3, 0.18, 0.10))
+    assert C.PLATEAU_BELOW == 7.0
+    from pathlib import Path
+
+    text = (Path(__file__).resolve().parent.parent / "docs/experiments/E3/d6_prediction.md").read_text("utf-8")
+    for _, _, _, point, sup, ref in C.PREDICTIONS:      # the doc states every threshold the code applies
+        assert f"about {point}" in text and f">= {sup}" in text and f"<= {ref}" in text
+
+
+def test_judge_boundaries():
+    assert C.judge(5.7, 5.7, 5.0) == "supported" and C.judge(5.69, 5.7, 5.0) == "partial"
+    assert C.judge(5.0, 5.7, 5.0) == "refuted" and C.judge(5.01, 5.7, 5.0) == "partial"
+
+
+def test_evaluate_supported_refuted_and_mixed():
+    base = {"a": _saturating(), "b": _saturating()}
+    ev = C.evaluate(_shifted(), base)
+    assert ev["overall"] == "supported" and [r["verdict"] for r in ev["rows"]] == ["supported"] * 4
+    assert ev["plateau"] == {"dists": [7, 8, 9], "max_mean_h": 6.7, "holds": True}
+    assert (ev["rows"][0]["baseline_min"], ev["rows"][0]["baseline_max"]) == (4.69, 4.69)
+    # a d6 model that behaves like the baseline refutes it
+    ev = C.evaluate(_saturating(), base)
+    assert ev["overall"] == "refuted" and {r["verdict"] for r in ev["rows"]} == {"refuted"}
+    # mean prediction moves but the drop does not: mixed
+    t = _shifted()
+    t[7] = _row(124, 6.2, 0.1, -0.1)
+    ev = C.evaluate(t, base)
+    assert ev["overall"] == "mixed" and [r["verdict"] for r in ev["rows"]] == [
+        "supported", "supported", "refuted", "supported"]
+    # no saturation at all (prediction keeps rising past 7) is not "supported" either
+    t = _shifted()
+    t[8] = _row(64, 7.6, 0.9, -0.5)
+    ev = C.evaluate(t, base)
+    assert ev["plateau"]["holds"] is False and ev["overall"] == "mixed"
+
+
+def test_solved_by_dist():
+    rows = [{"dist": 7, "status": "ok", "solved": True, "expansions": 20, "max_budget": 1000, "stop": "solved"},
+            {"dist": 7, "status": "ok", "solved": True, "expansions": 400, "max_budget": 1000, "stop": "solved"},
+            {"dist": 5, "status": "ok", "solved": False, "expansions": 1000, "max_budget": 1000, "stop": "budget"}]
+    assert C.solved_by_dist(rows) == {5: {"n": 1, 30: 0, 100: 0, 300: 0, 1000: 0},
+                                      7: {"n": 2, 30: 1, 100: 1, 300: 1, 1000: 2}}
+
+
+def test_bootstrap_cis_on_constant_scores():
+    rows = [{"problem_id": p, "dist": 7, "h_state": 6.0, "h_children": [5.5, 6.5], "optimal": [True, False]}
+            for p in "abc"]
+    ci = C.bootstrap_cis(rows, dists=(7,))
+    assert ci[("mean_h", 7)] == (6.0, 6.0) and ci[("drop", 7)] == (0.5, 0.5)
+
+
+def test_render_comparison(tmp_path):
+    tables = {"m0": _saturating(), "m1": _saturating(), "d6": _shifted()}
+    e3 = _fake_e3(tmp_path, tables)
+    scores = [{"problem_id": p, "dist": k, "h_state": tables["d6"][k]["mean_h"],
+               "h_children": [tables["d6"][k]["mean_h"] - tables["d6"][k]["drop"]], "optimal": [True]}
+              for k in (7, 8) for p in "ab"]
+    seeds.score_paths(e3 / "scores" / "d6", "test_depth")["scores"].write_text(
+        "".join(json.dumps(r) + "\n" for r in scores), encoding="utf-8")
+    base = {"m0": "runs/m0/best.pt", "m1": "runs/m1/best.pt"}
+    text = C.render(e3, base, "d6", "runs/d6/best.pt", prediction_commit="abc1234")
+    assert "**The prediction is supported on every pre-registered quantity.**" in text
+    assert "committed as `abc1234`" in text
+    assert "| mean prediction, k = 7 | 4.690 to 4.690 | about 6.2 | 6.200 (6.200 to 6.200) | >= 5.7 / <= 5.0 | supported |" in text
+    # per-distance row: baseline mean, range, new model, difference
+    assert "| 7 | 124 | 4.690 | 4.690 to 4.690 | 6.200 | +1.510 |" in text
+    assert "| 10 \\* | 2 | – | – | – | – |" in text                     # margin undefined there
+    assert C.render(e3, base, "d6", "runs/d6/best.pt", prediction_commit="abc1234") == text
+    with pytest.raises(seeds.SeedsError):
+        C.render(e3, base, "m0", "runs/m0/best.pt")

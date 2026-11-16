@@ -123,3 +123,21 @@ def test_dry_run_starts_nothing(ts, tmp_path, capsys):
 
 def test_refuses_to_retrain_h_v1_itself(ts):
     assert ts.main(["--dry-run", "--seeds", "0"]) == 2
+
+
+# ---------------------------------------------------------------------------------- other training data (E3-d6)
+
+def test_states_override_changes_only_states_and_out(ts, capsys):
+    pytest.importorskip("torch")
+    assert ts.main(["--dry-run", "--seeds", "0", "--states", "data/states-v2-d6", "--prefix", "h-d6-s"]) == 0
+    d6 = capsys.readouterr().out.strip().split()
+    base = ts.train_command(ts.base_args(), 0, "runs/h-v1", python=d6[0])
+    assert [(x, y) for x, y in zip(base, d6, strict=True) if x != y] == [
+        ("runs/h-v1", "runs/h-d6-s0"), ("data/states-v2", "data/states-v2-d6")]
+
+
+def test_other_states_need_their_own_prefix_and_seed_0_stays_refused_on_h_v1_data(ts, capsys):
+    assert ts.main(["--dry-run", "--seeds", "0", "--states", "data/states-v2-d6"]) == 2
+    assert "--prefix" in capsys.readouterr().err
+    assert ts.main(["--dry-run", "--seeds", "0", "--states", "data/states-v2", "--prefix", "x-"]) == 2
+    assert "h-v1 itself" in capsys.readouterr().err
