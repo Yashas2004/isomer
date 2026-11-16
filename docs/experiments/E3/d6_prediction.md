@@ -74,3 +74,40 @@ rate by budget and by problem distance; the test_id diagnostics.
   test_depth problems come from walks of 6-24.
 - The thresholds were chosen with the baseline results in view. Nothing about
   the d6 model was known when they were written.
+
+## Amendment before step B (2026-11-16)
+
+Written after `data/isobench-v2-d6` was built (train 37,962 problems; all three
+build checks passed) and after a pilot of the state generation, and before the
+full training states were generated or any d6 model was trained. No threshold
+and no point prediction above is changed.
+
+Pilot: `isomer states --data data/isobench-v2-d6 --offpath 6 --limit 600`
+(budget 3,000, the first 600 train problems in id order, output in a scratch
+directory). Its mix of problem distances matches the full train split
+(distance 5-6: 18.7% of the pilot, 18.8% of the split).
+
+| parent distance | off-path states attempted | dropped (BFS budget) | share |
+|---:|---:|---:|---:|
+| 1 to 4 | 10,051 | 0 | 0% |
+| 5 | 516 | 8 | 1.6% |
+| 6 | 172 | 68 | 39.5% |
+
+- About 40% of the off-path successors of distance-6 states exceed the
+  3,000-expansion labelling budget and are dropped. The pilot dropped 76
+  states in total; scaled to the full split that is about 4,400.
+- The pilot kept 65 states at distance 7 and 449 at distance 6 out of 13,157.
+  Scaled to the full split: about 3,700 states at distance 7, under 0.5% of
+  about 830,000, and about 28,000 at distance 6.
+- The distance-7 states that survive are those cheap enough to label within
+  the budget, so they are a selected, low-branching sample.
+
+Consequence: the effective training range of `h-d6-s0` is up to distance 6,
+with a thin, selected tail at 7, and not "up to 7" as the Intervention section
+says. A plateau near 6 is therefore the expected reading, at the lower end of
+the "between 6 and 7" stated above.
+
+Step B is run as planned, with budget 3,000 (the v2 setting), so that the
+distance cut-off stays the only change from h-v1's training data. These are
+pilot extrapolations; the actual counts will be taken from
+`data/states-v2-d6/stats.json` and reported in the summary.
