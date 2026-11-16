@@ -11,7 +11,8 @@ license = {text = "MIT"}
 dependencies = ["numpy>=1.26"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "hypothesis>=6.100", "ruff>=0.6"]
+# scipy: only isomer.e3.diagnose (Spearman correlation in the E3 diagnostics).
+dev = ["pytest>=8", "hypothesis>=6.100", "ruff>=0.6", "scipy>=1.11"]
 # Only isomer.learn.{model,train,infer} import torch. For the GPU, install the CUDA
 # wheel first (README); this extra then just checks the version.
 learn = ["torch>=2.2"]
