@@ -327,3 +327,34 @@ def test_render_family(tmp_path):
     assert C.render_family(e3, base, d6, "dm", "runs/dm/best.pt", prediction_commit="abc1234") == text
     with pytest.raises(seeds.SeedsError):
         C.render_family(e3, base, d6, "d0", "runs/d0/best.pt")
+
+
+def test_has_outputs(tmp_path):
+    e3 = _fake_e3(tmp_path, {"m0": _saturating()})
+    assert C.has_outputs(e3, "m0") is True
+    assert C.has_outputs(e3, "absent") is False
+    (e3 / "bench-seeds" / "m0" / "results.jsonl").unlink()
+    assert C.has_outputs(e3, "m0") is False                      # scores alone are not enough
+
+
+def test_render_family_with_missing_d6_seeds(tmp_path):
+    tables = {"b0": _saturating(), "b1": _saturating(), "d0": _shifted(), "dm": _shifted()}
+    e3 = _fake_e3(tmp_path, tables)
+    scores = [{"problem_id": p, "dist": k, "h_state": tables["dm"][k]["mean_h"],
+               "h_children": [tables["dm"][k]["mean_h"] - tables["dm"][k]["drop"]], "optimal": [True]}
+              for k in (7, 8) for p in "ab"]
+    seeds.score_paths(e3 / "scores" / "dm", "test_depth")["scores"].write_text(
+        "".join(json.dumps(r) + "\n" for r in scores), encoding="utf-8")
+    base = {"b0": "runs/b0/best.pt", "b1": "runs/b1/best.pt"}
+    full = C.render_family(e3, base, {"d0": "runs/d0/best.pt"}, "dm", "runs/dm/best.pt")
+    part = C.render_family(e3, base, {"d0": "runs/d0/best.pt"}, "dm", "runs/dm/best.pt", missing=("d1", "d2"))
+    assert "Partial summary" not in full
+    assert "**Partial summary: 1 of 3 d6 seeds.** Not yet available, and left out of every d6 column below: d1, d2." in part
+    assert "the \"d6 range\" is that seed's value, not a range" in part
+    # the verdict and every table are the same: only the notes differ
+    assert part.split("## Control verdict")[1] == full.split("## Control verdict")[1]
+    assert "| d6 (1 seed) |" in part and "there is one d6 seed so far" in part
+    # one d6 seed: its value, not "x to x"
+    assert "| mean prediction, k = 7 | 4.690 to 4.690 | 6.200 | 6.200 (6.200 to 6.200) | >= 5.7 / <= 5.0 | depth |" in part
+    with pytest.raises(seeds.SeedsError, match="no d6 seed"):
+        C.render_family(e3, base, {}, "dm", "runs/dm/best.pt", missing=("d0", "d1", "d2"))

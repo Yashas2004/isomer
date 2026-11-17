@@ -278,12 +278,23 @@ def family_table(groups: dict[str, dict[str, dict[int, dict]]], single: tuple[st
     return S._table([*head, name], rows)
 
 
+def has_outputs(e3: str | Path, name: str) -> bool:
+    """True if a model has everything the summaries read: both analyses and its bench results."""
+    e3 = Path(e3)
+    return (all(seeds.score_paths(e3 / "scores" / name, sp)["analysis"].is_file() for sp in seeds.SPLITS)
+            and (e3 / "bench-seeds" / name / "results.jsonl").is_file())
+
+
 def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], matched_name: str,
-                  matched_ckpt: str, prediction_commit: str | None = None) -> str:
+                  matched_ckpt: str, prediction_commit: str | None = None, missing: tuple[str, ...] = ()) -> str:
+    """``missing``: d6 seeds that were requested but have no outputs yet. They are left out of
+    every d6 range and named at the top of the summary, so a partial summary cannot pass for a full one."""
     e3 = Path(e3)
     names = [*baseline, *d6, matched_name]
     if len(set(names)) != len(names):
         raise seeds.SeedsError("a model is listed in two groups")
+    if not d6:
+        raise seeds.SeedsError("no d6 seed has outputs; the control needs at least one to compare with")
     tables, overall, _, labels, bench, _, bsum = S.load(e3, names)
     td = tables["test_depth"]
     groups = {"baseline": {m: td[m] for m in baseline}, "d6": {m: td[m] for m in d6}}
@@ -301,8 +312,14 @@ def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], 
             "excluded) and searched on the same 300 problems."), "",
            ("The control's decision rules are in `docs/experiments/E3/d6_matched_prediction.md`"
             + (f", committed as `{prediction_commit}`" if prediction_commit else "")
-            + " before the control was trained."), "",
-           "## Control verdict", ""]
+            + " before the control was trained."), ""]
+    if missing:
+        out += [(f"**Partial summary: {len(d6)} of {len(d6) + len(missing)} d6 seeds.** Not yet available, and "
+                 f"left out of every d6 column below: {', '.join(missing)}. "
+                 + ("With one d6 seed the \"d6 range\" is that seed's value, not a range. " if len(d6) == 1 else "")
+                 + "The control verdict uses only the fixed thresholds, so it does not change when they are added; "
+                 "the comparison with the d6 seed range does."), ""]
+    out += ["## Control verdict", ""]
     word = {"depth": "**Depth coverage is supported on every pre-registered quantity: the size-matched model "
                      "keeps the d6 behaviour.**",
             "volume": "**Data volume is supported on every pre-registered quantity: the size-matched model falls "
@@ -323,11 +340,13 @@ def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], 
             label = f"{r['quantity']}, k = {r['k']}"
         rows.append([label, _range(base), _range(deep), f"{S._f(r['value'])} ({S._f(lo)} to {S._f(hi)})",
                      f">= {r['depth_ge']} / <= {r['volume_le']}", r["verdict"]])
+    n_d6 = f"{len(d6)} seed" + ("" if len(d6) == 1 else "s")
     out += [S._table(["quantity (test_depth)", f"baseline range ({len(baseline)} seeds)",
-                      f"d6 range ({len(d6)} seeds)", f"{matched_name} (95% CI)", "depth / volume if", "verdict"],
+                      f"d6 ({n_d6})", f"{matched_name} (95% CI)", "depth / volume if", "verdict"],
                      rows), "",
-            ("The interval is a cluster bootstrap over problems within the one control model; seed-to-seed "
-             "variation is shown by the two ranges."), ""]
+            ("The interval is a cluster bootstrap over problems within the one control model. Seed-to-seed "
+             "variation is shown by the baseline range"
+             + (" only: there is one d6 seed so far." if len(d6) == 1 else " and the d6 range.")), ""]
 
     # ---- each d6 seed against the original prediction
     base_td = groups["baseline"]
@@ -362,7 +381,8 @@ def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], 
         row = [str(b)]
         for g in (baseline, d6):
             rates = [100 * bsum[m]["budgets"][b]["rate"] for m in g]
-            row += [f"{S.stat(rates)[0]:.1f}%", " to ".join(f"{x:.1f}%" for x in (min(rates), max(rates)))]
+            row += [f"{S.stat(rates)[0]:.1f}%", f"{rates[0]:.1f}%" if len(rates) == 1 else
+                    " to ".join(f"{x:.1f}%" for x in (min(rates), max(rates)))]
         c = bsum[matched_name]["budgets"][b]
         rows.append([*row, f"{c['solved']}/{c['n']} = {100 * c['rate']:.1f}%"])
     by = {m: solved_by_dist(bench[m]) for m in names}
@@ -392,8 +412,10 @@ def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], 
             ("- **Matched:** the number of train problems and of optimizer steps (the trainer batches by problem). "
              "**Not matched:** the number of training states; the control's problems are deeper than the "
              "baseline's and have more states each (table above)."),
-            ("- The control is one seed and one random subset. The d6 range shows how much a seed alone moves "
-             "each quantity."),
+            ("- The control is one seed and one random subset. "
+             + ("With one d6 seed there is no d6 seed range yet to show how much a seed alone moves each quantity; "
+                "the baseline seeds differ by up to 0.155 in top-1." if len(d6) == 1 else
+                "The d6 range shows how much a seed alone moves each quantity.")),
             ("- The control tests volume against depth coverage of the *training problems*. It does not separate "
              "the deeper problems from the thin tail of distance-7 off-path states they bring."),
             ("- Diagnostics use on-path states of one stored shortest proof; unknown states are excluded for "
@@ -402,7 +424,7 @@ def render_family(e3: str | Path, baseline: dict[str, str], d6: dict[str, str], 
 
 
 def write_family(e3: str | Path, out: str | Path, baseline: dict[str, str], d6: dict[str, str], matched_name: str,
-                 matched_ckpt: str, prediction_commit: str | None = None) -> Path:
-    Path(out).write_text(render_family(e3, baseline, d6, matched_name, matched_ckpt, prediction_commit),
+                 matched_ckpt: str, prediction_commit: str | None = None, missing: tuple[str, ...] = ()) -> Path:
+    Path(out).write_text(render_family(e3, baseline, d6, matched_name, matched_ckpt, prediction_commit, missing),
                          encoding="utf-8", newline="\n")
     return Path(out)

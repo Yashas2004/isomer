@@ -8,6 +8,8 @@
     python scripts/e3_seeds_summary.py --family
         -> runs/e3/d6_family_summary.md (baseline seeds, d6 seeds and the
            size-matched control against docs/experiments/E3/d6_matched_prediction.md)
+    python scripts/e3_seeds_summary.py --family --available --out runs/e3/d6_matched_summary.md
+        -> the same with only the d6 seeds that have outputs; the others are named
 
 Needs the outputs of e3_label.py, e3_score_seeds.py and e3_bench_seeds.py for
 every model named. Takes seconds; runs no model and no search.
@@ -59,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--baseline", default=None, help="baseline models (default: the h-v1 seeds)")
     ap.add_argument("--d6", default="h-d6-s0,h-d6-s1,h-d6-s2", help="d6 seeds for --family")
     ap.add_argument("--matched", default="h-d6m-s0", help="size-matched control for --family")
+    ap.add_argument("--available", action="store_true",
+                    help="--family: leave out d6 seeds that have no scores or bench results yet, and name them in "
+                         "the summary (baseline and control must still be complete)")
     ap.add_argument("--e2-run", default="runs/E2-test_depth", help="E2 run to compare the h-v1 search with")
     a = ap.parse_args(argv)
     os.chdir(ROOT)      # relative paths, so the summary names runs/..., not this machine's directories
@@ -68,9 +73,16 @@ def main(argv: list[str] | None = None) -> int:
             raise seeds.SeedsError("--family and --compare are different summaries; give one")
         if a.family:
             name, ckpt = _one(a.matched, "--matched")
+            d6 = seeds.parse_models(a.d6)
+            missing: tuple[str, ...] = ()
+            if a.available:
+                missing = tuple(m for m in d6 if not seeds_compare.has_outputs(e3, m))
+                d6 = {m: c for m, c in d6.items() if m not in missing}
+                if missing:
+                    print(f"note: leaving out d6 seeds without outputs: {', '.join(missing)}")
             out = seeds_compare.write_family(e3, Path(a.out) if a.out else e3 / "d6_family_summary.md",
-                                             seeds.parse_models(a.baseline), seeds.parse_models(a.d6), name, ckpt,
-                                             _last_commit(MATCHED_PREDICTION))
+                                             seeds.parse_models(a.baseline), d6, name, ckpt,
+                                             _last_commit(MATCHED_PREDICTION), missing)
         elif a.compare:
             name, ckpt = _one(a.compare, "--compare")
             out = seeds_compare.write(e3, Path(a.out) if a.out else e3 / "d6_summary.md",
