@@ -207,9 +207,15 @@ def method_name(ckpt: str, precision: str = PRECISION) -> str:
     return f"neural-w1@{ckpt}#{precision}"
 
 
-def bench_command(ckpt: str, out: str, split: str = "test_depth", budgets: tuple[int, ...] = BUDGETS,
-                  workers: int = 2, python: str = sys.executable) -> list[str]:
-    """`isomer bench` for one model: the E2 command with only the checkpoint and output changed."""
-    return [python, "-m", "isomer", "bench", "--data", DATA, "--split", split, "--ids", IDS.format(split=split),
-            "--methods", method_name(ckpt), "--budgets", ",".join(str(b) for b in budgets),
-            "--workers", str(workers), "--out", out]
+def bench_command(ckpt: str | None, out: str, split: str = "test_depth", budgets: tuple[int, ...] = BUDGETS,
+                  workers: int = 2, python: str = sys.executable, data: str = DATA, ids: str | None = None,
+                  methods: tuple[str, ...] | None = None) -> list[str]:
+    """`isomer bench` for one model: the E2 command with only the checkpoint and output changed.
+    ``data``/``ids`` point it at another sample (E3-fresh); ``methods`` replaces the neural method
+    (non-neural baselines, ``ckpt`` unused)."""
+    if not methods and not ckpt:
+        raise SeedsError("bench_command needs a checkpoint or methods")
+    meth = ",".join(methods) if methods else method_name(norm_path(ckpt or ""))
+    return [python, "-m", "isomer", "bench", "--data", data, "--split", split,
+            "--ids", ids or IDS.format(split=split), "--methods", meth,
+            "--budgets", ",".join(str(b) for b in budgets), "--workers", str(workers), "--out", out]

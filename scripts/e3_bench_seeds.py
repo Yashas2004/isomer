@@ -2,6 +2,9 @@
 
     python scripts/e3_bench_seeds.py
     python scripts/e3_bench_seeds.py --dry-run     # print the commands, start nothing
+    python scripts/e3_bench_seeds.py --models ... --data data/isobench-fresh --split test_depth_fresh \
+        --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh/bench-seeds \
+        --baselines bfs-bidir,bestfirst-symbol_bag-w1                                    # E3-fresh
 
 One ``isomer bench`` run per model, one after the other, at budgets
 30,100,300,1000 (one search per problem at 1,000 expansions; smaller budgets
@@ -55,6 +58,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="comma-separated NAME or NAME=CHECKPOINT (default: the three h-v1 seeds)")
     ap.add_argument("--out", default="runs/e3/bench-seeds")
     ap.add_argument("--workers", type=int, default=2, help="as in E2; each holds its own CUDA context")
+    ap.add_argument("--data", default=seeds.DATA)
+    ap.add_argument("--split", default="test_depth")
+    ap.add_argument("--ids", default=None, help=f"default: {seeds.IDS}")
+    ap.add_argument("--baselines", default="",
+                    help="comma-separated non-neural methods, run together as one extra run OUT/baselines "
+                         "(e.g. bfs-bidir,bestfirst-symbol_bag-w1)")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     try:
@@ -62,7 +71,14 @@ def main(argv: list[str] | None = None) -> int:
     except seeds.SeedsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    plan = [(m, seeds.bench_command(ckpt, f"{a.out}/{m}", workers=a.workers)) for m, ckpt in models.items()]
+    if "baselines" in models:
+        print("error: 'baselines' is the name of the non-neural run; pick another model name", file=sys.stderr)
+        return 2
+    where = {"split": a.split, "data": a.data, "ids": a.ids, "workers": a.workers}
+    plan = [(m, seeds.bench_command(ckpt, f"{a.out}/{m}", **where)) for m, ckpt in models.items()]
+    base = tuple(s.strip() for s in a.baselines.split(",") if s.strip())
+    if base:
+        plan.append(("baselines", seeds.bench_command(None, f"{a.out}/baselines", methods=base, **where)))
     if a.dry_run:
         for _, cmd in plan:
             print(subprocess.list2cmdline(cmd))

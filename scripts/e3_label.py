@@ -2,6 +2,8 @@
 
     python scripts/e3_label.py                   # test_id, then test_depth, 5 workers
     python scripts/e3_label.py --workers 3       # if the machine starts swapping
+    python scripts/e3_label.py --splits test_depth_fresh --data data/isobench-fresh \
+        --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh      # E3-fresh
 
 For each split: take the E2 stratified sample out of data/isobench-v2 by id
 (``runs/e3/data/SPLIT.jsonl``; no relabelling, the dataset's own records), then
@@ -37,6 +39,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="labelling processes; a test_depth problem peaked at 0.3-0.5 GB in a trial of 11, "
                          "and a long-lived worker stays at its high-water mark")
     ap.add_argument("--out", default="runs/e3", help="writes OUT/data and OUT/labels")
+    ap.add_argument("--data", default=seeds.DATA, help="dataset directory holding SPLIT.jsonl")
+    ap.add_argument("--ids", default=seeds.IDS, help="id file of the sample; {split} is replaced by the split name")
     ap.add_argument("--sample-only", action="store_true", help="write the samples, label nothing")
     a = ap.parse_args(argv)
     out = ROOT / a.out
@@ -44,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         for split in [s for s in a.splits.split(",") if s]:
             sample = out / "data" / f"{split}.jsonl"
             labels = out / "labels" / f"{split}.jsonl"
-            info = seeds.write_sample(split, ROOT / seeds.IDS.format(split=split), ROOT / seeds.DATA, sample)
+            info = seeds.write_sample(split, ROOT / a.ids.format(split=split), ROOT / a.data, sample)
             print(f"== {split}: {info['problems']} problems -> {sample.relative_to(ROOT).as_posix()} "
                   f"(dataset hash {'matches the id file' if info['dataset_hash_checked'] else 'NOT CHECKED'}, "
                   f"strata match)", flush=True)
