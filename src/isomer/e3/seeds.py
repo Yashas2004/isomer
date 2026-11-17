@@ -41,6 +41,13 @@ class SeedsError(Exception):
     """A user-facing error: missing input, incomplete labels, a sample that does not match."""
 
 
+def norm_path(path: str | Path) -> str:
+    """A checkpoint path with forward slashes on every platform. ``Path.as_posix`` only converts
+    backslashes on Windows; on Linux ``runs\\x\\best.pt`` is one file name and would not compare
+    equal to ``runs/x/best.pt``."""
+    return str(path).replace("\\", "/")
+
+
 def parse_models(spec: str | None) -> dict[str, str]:
     """``"h-v1,h-d6-s0,x=runs/x/best.pt"`` -> {name: checkpoint}. A bare name must be one of
     ``KNOWN``; ``name=checkpoint`` adds a model without editing this file. None = all of ``MODELS``."""
@@ -59,9 +66,9 @@ def parse_models(spec: str | None) -> dict[str, str]:
             raise SeedsError(f"bad model {item!r}; expected NAME or NAME=CHECKPOINT")
         if name in out:
             raise SeedsError(f"model {name!r} is listed twice")
-        if name in KNOWN and Path(ckpt).as_posix() != KNOWN[name]:
+        if name in KNOWN and norm_path(ckpt) != norm_path(KNOWN[name]):
             raise SeedsError(f"{name!r} is the name of {KNOWN[name]}; pick another name for {ckpt}")
-        out[name] = Path(ckpt).as_posix()
+        out[name] = norm_path(ckpt)
     if not out:
         raise SeedsError("no models given")
     return out

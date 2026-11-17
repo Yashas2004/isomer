@@ -203,6 +203,21 @@ def test_parse_models():
             seeds.parse_models(bad)
 
 
+def test_norm_path_is_the_same_on_every_platform():
+    # pure string handling: no os.sep, no Path, so Linux CI and Windows give the same result
+    assert seeds.norm_path("runs\\h-d6-s0\\best.pt") == "runs/h-d6-s0/best.pt"
+    assert seeds.norm_path("runs/h-d6-s0\\best.pt") == "runs/h-d6-s0/best.pt"
+    assert seeds.norm_path("runs/h-d6-s0/best.pt") == "runs/h-d6-s0/best.pt"
+    assert seeds.norm_path(Path("runs") / "h-d6-s0" / "best.pt") == "runs/h-d6-s0/best.pt"
+
+
+@pytest.mark.parametrize("ckpt", ["runs/h-d6-s0/best.pt", "runs\\h-d6-s0\\best.pt", "runs/h-d6-s0\\best.pt"])
+def test_known_name_accepts_its_own_checkpoint_in_any_separator(ckpt):
+    assert seeds.parse_models(f"h-d6-s0={ckpt}") == {"h-d6-s0": "runs/h-d6-s0/best.pt"}
+    with pytest.raises(seeds.SeedsError, match="pick another name"):
+        seeds.parse_models(ckpt.replace("h-d6-s0", "h-d6-s1", 1).join(("h-d6-s0=", "")))
+
+
 def test_scripts_accept_a_named_checkpoint(capsys):
     assert _script("e3_bench_seeds").main(["--dry-run", "--models", "h-d6-s0=runs/h-d6-s0/best.pt"]) == 0
     line, = capsys.readouterr().out.strip().splitlines()
