@@ -6,6 +6,7 @@ Isomer proves equations in algebraic theories by searching over rewrite steps. A
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![python](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)
 [![checkpoint](https://img.shields.io/badge/checkpoint-v0.2--e2-informational)](https://github.com/Yashas2004/isomer/releases/tag/v0.2-e2)
+[![checkpoints](https://img.shields.io/badge/checkpoints-v0.3--e3-informational)](https://github.com/Yashas2004/isomer/releases/tag/v0.3-e3)
 
 > **Headline (pre-registered, kernel-checked).** On problems whose shortest proofs (5–10 steps) are longer than any proof seen in training (distances up to 4), learned guidance solves **74.7%** within 1,000 expansions. The hand-written symbol_bag heuristic solves **20.0%** and bidirectional BFS **58.3%**. Every problem symbol_bag solved, the learned heuristic also solved, at every budget (Holm p ≤ 1.4e-38).
 >
@@ -85,6 +86,41 @@ How the modules connect (the pipeline view is the diagram above):
 
 ## Results
 
+### E3: why the heuristic stops at its training range
+
+Four results, each confirmed by a rule fixed in advance. The full account, with commits, is in [docs/experiments/E3/REPORT.md](docs/experiments/E3/REPORT.md) ("E3 final status").
+
+1. **Saturation.** The baseline's distance estimate flattens just below the largest training distance, in all three training seeds. On test_depth states at true distance 7–8, its mean prediction is 4.685–4.764, while training states reach distance 5. Its drop to the optimal child shrinks to 0.068–0.139 at distance 7.
+2. **The d6 intervention.** The same configuration trained on problems up to distance 6 (h-d6, three seeds) no longer saturates there. Its mean prediction at distance 7 is 6.186–6.291, and its all-children top-1 is 0.948–0.964 against 0.645–0.800 for the baseline.
+3. **The size-matched control.** h-d6m-s0 has as many training problems and optimizer steps as the baseline, drawn from the d6 data. It is "depth" on all five pre-registered rules, so the gain comes from depth coverage, not data volume. It lies slightly below every d6 seed on most quantities.
+4. **Fresh confirmation.** The four hypotheses H1–H4 were tested again on 300 newly generated problems, with ids disjoint from every v2 and d6 split. All four are supported.
+
+On the fresh sample (300 problems, 1,939 scored states; ranges over seeds; solved = kernel-accepted, of 300):
+
+| model | trained on | mean prediction at k = 7 | all-children top-1 | solved at 30 | solved at 1,000 |
+|---|---|---:|---:|---:|---:|
+| baseline h-v1 (3 seeds) | problems up to distance 4 | 4.651–4.664 | 0.613–0.803 | 114–171 | 192–234 |
+| d6 (3 seeds) | problems up to distance 6 | 6.025–6.284 | 0.949–0.971 | 261–281 | 290–294 |
+| control h-d6m-s0 (1 seed) | distance up to 6, as many problems as the baseline | 6.032 | 0.936 | 248 | 290 |
+
+**Pre-registration.** Each experiment's prediction and decision rules were committed before that experiment's run, and the summaries judge them with those rules:
+
+- d6: [d6_prediction.md](docs/experiments/E3/d6_prediction.md), commit `4821ed0`, amended in `583e232` before the training states were built.
+- Size-matched control: [d6_matched_prediction.md](docs/experiments/E3/d6_matched_prediction.md), commit `a2815ff`.
+- Fresh confirmation: [fresh_prediction.md](docs/experiments/E3/fresh_prediction.md), rules in `40ebab3` and sample in `9a345d6`, before any model was run on it.
+
+The saturation thresholds of result 1 were chosen after seeing the seed results. They were first tested against a fixed rule on the fresh sample (H1).
+
+Summaries:
+- [seeds](docs/experiments/E3/seeds_summary.md)
+- [d6](docs/experiments/E3/d6_summary.md)
+- [train/test overlap](docs/experiments/E3/overlap_summary.md)
+- [control](docs/experiments/E3/d6_matched_summary.md)
+- [d6 family](docs/experiments/E3/d6_family_summary.md)
+- [fresh](docs/experiments/E3/fresh_summary.md)
+
+Checkpoints: [checkpoints.md](docs/experiments/E3/checkpoints.md).
+
 **E2: learned heuristic vs baselines on IsoBench v2.** Solve rate at 1,000 node expansions; only kernel-accepted proofs count. Plan: [docs/experiments/E2-learned-heuristic.md](docs/experiments/E2-learned-heuristic.md). Full results: [docs/results/E2](docs/results/E2/README.md).
 
 | split | what it tests | neural-w1 (learned) | best-first symbol_bag | bfs-fwd | bfs-bidir |
@@ -142,6 +178,21 @@ certutil -hashfile runs/h-v1/best.pt SHA256
 mkdir -p runs/h-v1
 curl -L -o runs/h-v1/best.pt https://github.com/Yashas2004/isomer/releases/download/v0.2-e2/best.pt
 sha256sum runs/h-v1/best.pt
+```
+
+The E3 checkpoints are in release [v0.3-e3](https://github.com/Yashas2004/isomer/releases/tag/v0.3-e3): h-v1-s1, h-v1-s2, h-d6-s0, h-d6-s1, h-d6-s2 and h-d6m-s0, each as `<model>.pt`, with `SHA256SUMS.txt`. Their training data, seeds and sha256 are in [docs/experiments/E3/checkpoints.md](docs/experiments/E3/checkpoints.md). The E3 scripts expect `runs/<model>/best.pt`. For example:
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force runs/h-d6-s0
+Invoke-WebRequest https://github.com/Yashas2004/isomer/releases/download/v0.3-e3/h-d6-s0.pt -OutFile runs/h-d6-s0/best.pt
+certutil -hashfile runs/h-d6-s0/best.pt SHA256
+```
+```bash
+# Linux/macOS
+mkdir -p runs/h-d6-s0
+curl -L -o runs/h-d6-s0/best.pt https://github.com/Yashas2004/isomer/releases/download/v0.3-e3/h-d6-s0.pt
+sha256sum runs/h-d6-s0/best.pt
 ```
 
 ## Quickstart
@@ -208,13 +259,49 @@ Measured E2 wall time per split (elapsed time printed by bench at 100%):
 
 `report` and `timecompare` only read logs; each takes seconds. Every run records its git commit and `git_dirty: false` in `config.json`.
 
+## E3 reproduction
+
+The commands below were run in this order, on the same laptop, from the repository root. Each is one line and works in Command Prompt, PowerShell and bash. Every output goes to `runs/` or a new `data/` directory; nothing existing is changed.
+
+Measured times come from the files each step writes:
+- training: per-epoch train + validation seconds in `metrics.jsonl`, without model and data loading;
+- the states build: `stats.json`;
+- search: the elapsed time `bench` prints at 100%;
+- scoring: `seconds` in `*.score.json`.
+
+"Not recorded" means the step printed its time only to the console.
+
+| # | step | command | measured time |
+|---:|---|---|---:|
+| 1 | d6 dataset (train pool relabelled to distance 6) | `python scripts/e3_build_d6.py` | not recorded |
+| 2 | d6 training states | `python -m isomer states --data data/isobench-v2-d6 --out data/states-v2-d6 --offpath 6 --budget 3000` | 14,075 s |
+| 3 | baseline seeds h-v1-s1, h-v1-s2 | `python scripts/train_seeds.py` | 9,166 s, 9,056 s |
+| 4 | d6 seeds h-d6-s0, s1, s2 | `python scripts/train_seeds.py --seeds 0,1,2 --states data/states-v2-d6 --prefix h-d6-s` | 13,966 s, 13,803 s, 13,751 s |
+| 5 | size-matched subset of the d6 states | `python scripts/e3_build_matched.py` | not recorded |
+| 6 | control h-d6m-s0 | `python scripts/train_seeds.py --seeds 0 --states data/states-v2-d6-matched --prefix h-d6m-s` | 11,242 s |
+| 7 | label every child on the E2 samples (test_id, test_depth) | `python scripts/e3_label.py` | not recorded |
+| 8 | score the seven models | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0` | 16.8–37.2 s (test_depth), 5.1–11.2 s (test_id) per model |
+| 9 | neural-w1 search, E2 test_depth sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0` | 637–1,292 s per baseline seed; 57–221 s per d6 seed; 93 s control |
+| 10 | seed, d6, control summaries | `python scripts/e3_seeds_summary.py` and `python scripts/e3_seeds_summary.py --family --d6 h-d6-s0,h-d6-s1,h-d6-s2 --matched h-d6m-s0` | about 2 s each |
+| 11 | fresh pool and its 300-problem sample | `python scripts/e3_build_fresh.py` | not recorded |
+| 12 | label every child on the fresh sample | `python scripts/e3_label.py --splits test_depth_fresh --data data/isobench-fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh --workers 5` | not recorded |
+| 13 | score on the fresh sample | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --splits test_depth_fresh --e3 runs/e3-fresh` | 16.7–17.4 s per model |
+| 14 | search on the fresh sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --data data/isobench-fresh --split test_depth_fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh/bench-seeds --baselines bfs-bidir,bestfirst-symbol_bag-w1` | 621–1,207 s per baseline seed; 70–106 s per d6 seed; 146 s control; 247 s bfs-bidir and symbol_bag |
+| 15 | fresh summary (H1–H4) | `python scripts/e3_fresh_summary.py` | about 27 s |
+
+Notes:
+- **Pre-registration timing.** The prediction files were committed before steps 2, 6 and 11 (see [Results](#e3-why-the-heuristic-stops-at-its-training-range)). The fresh sample was committed after step 11 and before step 12.
+- **Interruptions.** Steps 7, 11, 12 and 14 resume where they stopped if rerun.
+- **Memory.** The labelling steps are sized for 16 GB of RAM (`--workers`).
+- **GPU memory.** Training peaked at 3.0 GB, measured with `torch.cuda.max_memory_allocated`.
+
 ## Why trust the numbers
 
 - **Kernel gate.** The benchmark runner rebuilds each certificate from the dataset record's own goal and runs the kernel on it. A rejected proof makes the run fail loudly; it is never silently counted.
 - **No circular labels.** The evaluation labels come from a 20× larger budget than any benchmark run; the runner warns when a budget comes within 10× of the labelling budget.
 - **Frozen before testing.** Questions, predictions, analysis and problem ids were committed before any search on the test splits (E2 plan at commit `cd3d517`).
 - **Paired statistics.** Exact McNemar tests with Holm correction; the optimality gap is computed only on problems that every method solved.
-- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 225 tests, and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
+- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 379 tests (5 marked slow), and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
 
 ## Limitations
 
@@ -238,6 +325,12 @@ Measured E2 wall time per split (elapsed time printed by bench at 100%):
 | [E1 plan](docs/experiments/E1-baselines.md) · [results](docs/results/E1/README.md) | non-neural baselines |
 | [E2 plan](docs/experiments/E2-learned-heuristic.md) · [results](docs/results/E2/README.md) | learned heuristic vs baselines |
 | [train-h-v1](docs/results/train-h-v1/) | training config, metrics and checkpoint hash |
+| [E3 report](docs/experiments/E3/REPORT.md) | diagnostics of the learned heuristic; "E3 final status" at the top |
+| [E3 seeds](docs/experiments/E3/seeds_summary.md) | saturation and margin collapse in three baseline seeds |
+| [E3 d6 prediction](docs/experiments/E3/d6_prediction.md) · [summary](docs/experiments/E3/d6_summary.md) · [overlap](docs/experiments/E3/overlap_summary.md) | training on deeper problems (distance up to 6) |
+| [E3 control prediction](docs/experiments/E3/d6_matched_prediction.md) · [summary](docs/experiments/E3/d6_matched_summary.md) · [family](docs/experiments/E3/d6_family_summary.md) | size-matched control: depth coverage vs data volume |
+| [E3 fresh prediction](docs/experiments/E3/fresh_prediction.md) · [summary](docs/experiments/E3/fresh_summary.md) | confirmation on 300 newly generated problems |
+| [E3 checkpoints](docs/experiments/E3/checkpoints.md) | the seven E3 models: data, seed, sha256, download |
 | [docs/datasets/](docs/datasets/) | datasheets for every IsoBench version |
 
 ## Repository layout
