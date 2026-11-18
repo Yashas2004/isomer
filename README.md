@@ -26,8 +26,10 @@ flowchart LR
   K --> C[Certificates + SHA-256 digest]
   I -->|train split only| ST[Distance-labelled states]
   ST --> T[Training]
-  T --> M[Model h-v1]
+  T --> M["Models: h-v1 (to dist 4), h-d6 (to dist 6)"]
   M --> S
+  I --> E["E3 diagnostics: exact child labels, renamings"]
+  M --> E
 ```
 
 - **IsoBench** is a deterministic benchmark built from random walks. Each problem is labelled with its shortest proof length by bidirectional BFS, with certified bounds.
@@ -48,40 +50,40 @@ flowchart LR
 How the modules connect (the pipeline view is the diagram above):
 
 ```text
-                     +----------------------------------+
-                     |  CLI: python -m isomer <command> |
-                     |  prove · data · states · train   |
-                     |  bench · report · timecompare    |
-                     +----------------+-----------------+
-                                      |
-             +------------------------+-----------------+
-             v                                          v
-+--------------------------+               +--------------------------+
-| IsoBench builder (data/) |   problems    | Search (search/)         |
-| random walks, 4 theories |-------------->| bfs-fwd, bfs-bidir       |
-| bidir-BFS labels with    |               | best-first: size_diff,   |
-|   certified bounds       |        +----->|   symbol_bag             |
-| train / eval / held-out  |        |      | neural best-first        |
-+--------------------------+        |      +--------------------------+
-             |                      |                   |
-             | train split only     |  h(state, goal)   | proof steps
-             v                      |                   v
-+--------------------------+        |      +--------------------------+
-| Learning (learn/)        |        |      | Trusted kernel (core/)   |
-| distance-labelled states |        |      | 141 lines, imports no    |
-| tokenizer + transformer  |--------+      |   search/data/model code |
-| Huber + listwise ranking | checkpoint    | replays JSON certificate |
-| bf16, fits a 4 GB GPU    |   h-v1        | -> ACCEPTED / REJECTED   |
-+--------------------------+               +--------------------------+
-                                                        |
-                                                        | accepted proofs only
-                                                        v
-                                           +--------------------------+
-                                           | Benchmark (bench/)       |
-                                           | prefix-property runs     |
-                                           | McNemar + Holm, Wilson   |
-                                           | equal-time analysis      |
-                                           +--------------------------+
+                        +----------------------------------+
+                        |  CLI: python -m isomer <command> |
+                        |  prove · data · states · train   |
+                        |  bench · report · timecompare    |
+                        +----------------+-----------------+
+                                         |
+                +------------------------+-----------------+
+                v                                          v
+   +--------------------------+               +--------------------------+
++--| IsoBench builder (data/) |   problems    | Search (search/)         |
+|  | random walks, 4 theories |-------------->| bfs-fwd, bfs-bidir       |
+|  | bidir-BFS labels with    |               | best-first: size_diff,   |
+|  |   certified bounds       |        +----->|   symbol_bag             |
+|  | train / eval / held-out  |        |      | neural best-first        |
+|  +--------------------------+        |      +--------------------------+
+|               |                      |                   |
+|               | train split only     |  h(state, goal)   | proof steps
+|               v                      |                   v
+|  +--------------------------+        |      +--------------------------+
+|  | Learning (learn/)        |        |      | Trusted kernel (core/)   |
+|  | distance-labelled states |        |      | 141 lines, imports no    |
+|  | tokenizer + transformer  |--------+      |   search/data/model code |
+|  | Huber + listwise ranking | checkpoint    | replays JSON certificate |
+|  | bf16, fits a 4 GB GPU    |   h-v1        | -> ACCEPTED / REJECTED   |
+|  +--------------------------+               +--------------------------+
+|               |                                          |
+| eval samples  | checkpoints                              | accepted proofs only
+|               v                                          v
+|  +--------------------------+               +--------------------------+
++->| E3 analysis (e3/)        |               | Benchmark (bench/)       |
+   | exact all-children labels|               | prefix-property runs     |
+   | renamings, diagnostics,  |               | McNemar + Holm, Wilson   |
+   | summaries                |               | equal-time analysis      |
+   +--------------------------+               +--------------------------+
 ```
 
 ## Results
@@ -94,6 +96,10 @@ Four results, each confirmed by a rule fixed in advance. The full account, with 
 2. **The d6 intervention.** The same configuration trained on problems up to distance 6 (h-d6, three seeds) no longer saturates there. Its mean prediction at distance 7 is 6.186–6.291, and its all-children top-1 is 0.948–0.964 against 0.645–0.800 for the baseline.
 3. **The size-matched control.** h-d6m-s0 has as many training problems and optimizer steps as the baseline, drawn from the d6 data. It is "depth" on all five pre-registered rules, so the gain comes from depth coverage, not data volume. It lies slightly below every d6 seed on most quantities.
 4. **Fresh confirmation.** The four hypotheses H1–H4 were tested again on 300 newly generated problems, with ids disjoint from every v2 and d6 split. All four are supported.
+
+![Mean predicted distance vs true distance on the fresh sample: the baseline levels off near 4.7, below its training maximum of 5; the d6 seeds and the control level off near 6.5, below 7](docs/experiments/E3/saturation.png)
+
+*Figure 1.* Mean predicted distance by true distance on the fresh sample. Lines are the mean over seeds and bands span the three seeds. Dashed lines mark each family's training maximum. Drawn by `scripts/e3_figures.py` from [fresh_summary.md](docs/experiments/E3/fresh_summary.md) only. Distance 10 has 1 scored state and is left out.
 
 On the fresh sample (300 problems, 1,939 scored states; ranges over seeds; solved = kernel-accepted, of 300):
 
@@ -132,12 +138,14 @@ Checkpoints: [checkpoints.md](docs/experiments/E3/checkpoints.md).
 
 \* test_id was labelled by bfs-bidir, so that cell is reported but not interpreted.
 
+The E2 numbers are for h-v1 (seed 0). Across three training seeds, the test_depth solve rate at 1,000 expansions is 65.0–80.0% (mean 73.2%), from [docs/experiments/E3/seeds_summary.md](docs/experiments/E3/seeds_summary.md).
+
 ![Solve rate by true proof length on test_depth](docs/results/E2/test_depth/solve_by_dist.png)
 
 | finding (test_depth unless stated) | value |
 |---|---|
 | Solve rate at 30 expansions, learned vs symbol_bag at 10,000 | 46.3% vs 41.0% |
-| Solve rate by true distance 5 / 6 / 7 / 8 / 9 | 69/70 · 86/97 · 41/58 · 24/52 · 3/19 |
+| Solve rate by true distance 5 / 6 / 7 / 8 / 9 / 10 | 69/70 · 86/97 · 41/58 · 24/52 · 3/19 · 1/4 |
 | Fair optimality gap (1.000 = always shortest) | 1.000 learned vs 1.200 symbol_bag |
 | Median nodes stored when solved | 374 learned vs 6,887 symbol_bag |
 | Equal wall-clock, 1 s per problem | 50.3% learned vs 18.0% symbol_bag |
@@ -288,6 +296,7 @@ Measured times come from the files each step writes:
 | 13 | score on the fresh sample | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --splits test_depth_fresh --e3 runs/e3-fresh` | 16.7–17.4 s per model |
 | 14 | search on the fresh sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --data data/isobench-fresh --split test_depth_fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh/bench-seeds --baselines bfs-bidir,bestfirst-symbol_bag-w1` | 621–1,207 s per baseline seed; 70–106 s per d6 seed; 146 s control; 247 s bfs-bidir and symbol_bag |
 | 15 | fresh summary (H1–H4) | `python scripts/e3_fresh_summary.py` | about 27 s |
+| 16 | Figure 1 (`docs/experiments/E3/saturation.png`), from the committed fresh summary | `python scripts/e3_figures.py` | about 2 s |
 
 Notes:
 - **Pre-registration timing.** The prediction files were committed before steps 2, 6 and 11 (see [Results](#e3-why-the-heuristic-stops-at-its-training-range)). The fresh sample was committed after step 11 and before step 12.
@@ -301,7 +310,7 @@ Notes:
 - **No circular labels.** The evaluation labels come from a 20× larger budget than any benchmark run; the runner warns when a budget comes within 10× of the labelling budget.
 - **Frozen before testing.** Questions, predictions, analysis and problem ids were committed before any search on the test splits (E2 plan at commit `cd3d517`).
 - **Paired statistics.** Exact McNemar tests with Holm correction; the optimality gap is computed only on problems that every method solved.
-- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 379 tests (5 marked slow), and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
+- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 383 tests (5 marked slow), and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
 
 ## Limitations
 
