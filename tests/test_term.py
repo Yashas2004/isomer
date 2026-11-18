@@ -1,5 +1,5 @@
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from isomer.core.term import (
@@ -30,6 +30,11 @@ def terms(max_leaves=12):
     )
 
 
+# A Hypothesis health check (FailedHealthCheck, most likely too_slow; the log line was cut off)
+# tripped once while the machine was under load (2026-11-18), and the test passed when rerun idle.
+# too_slow measures how fast Hypothesis generates terms, not whether printing and parsing
+# round-trip, so it is suppressed here; the property tested is unchanged.
+@settings(suppress_health_check=[HealthCheck.too_slow])
 @given(terms())
 def test_print_parse_roundtrip(t):
     assert parse(str(t)) == t
