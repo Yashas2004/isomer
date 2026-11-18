@@ -296,7 +296,7 @@ Measured times come from the files each step writes:
 | 13 | score on the fresh sample | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --splits test_depth_fresh --e3 runs/e3-fresh` | 16.7–17.4 s per model |
 | 14 | search on the fresh sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --data data/isobench-fresh --split test_depth_fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh/bench-seeds --baselines bfs-bidir,bestfirst-symbol_bag-w1` | 621–1,207 s per baseline seed; 70–106 s per d6 seed; 146 s control; 247 s bfs-bidir and symbol_bag |
 | 15 | fresh summary (H1–H4) | `python scripts/e3_fresh_summary.py` | about 27 s |
-| 16 | Figure 1 (`docs/experiments/E3/saturation.png`), from the committed fresh summary | `python scripts/e3_figures.py` | about 2 s |
+| 16 | Figure 1 (`docs/experiments/E3/saturation.png`; `--paper` writes `saturation.pdf`, TMLR single column, no title or footer), from the committed fresh summary | `python scripts/e3_figures.py` and `python scripts/e3_figures.py --paper` | about 2 s each |
 
 Notes:
 - **Pre-registration timing.** The prediction files were committed before steps 2, 6 and 11 (see [Results](#e3-why-the-heuristic-stops-at-its-training-range)). The fresh sample was committed after step 11 and before step 12.
@@ -310,7 +310,7 @@ Notes:
 - **No circular labels.** The evaluation labels come from a 20× larger budget than any benchmark run; the runner warns when a budget comes within 10× of the labelling budget.
 - **Frozen before testing.** Questions, predictions, analysis and problem ids were committed before any search on the test splits (E2 plan at commit `cd3d517`).
 - **Paired statistics.** Exact McNemar tests with Holm correction; the optimality gap is computed only on problems that every method solved.
-- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 383 tests (5 marked slow), and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
+- **Determinism tests.** Byte-identical dataset rebuilds; deterministic neural search on CPU and CUDA; the prefix property (one run gives the results for every smaller budget) is tested for every searcher; golden fp32 outputs pin the model. The suite has 385 tests (5 marked slow), and CI runs on Ubuntu and Windows with Python 3.10 and 3.12.
 
 ## Limitations
 

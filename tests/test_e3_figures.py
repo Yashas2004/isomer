@@ -32,9 +32,29 @@ def test_refuses_another_table():
         figures.mean_prediction_table(bad)
 
 
-def test_plot_writes_the_same_png_twice(tmp_path):
+def test_spread_keeps_labels_apart_and_near_their_lines():
+    assert figures.spread([1.0, 5.0, 9.0], 0.5) == [1.0, 5.0, 9.0]                 # far apart: unchanged
+    pos = figures.spread([4.6, 6.538, 6.540], 0.5)
+    assert pos[0] == 4.6 and pos[2] - pos[1] == pytest.approx(0.5)                # crowded pair split
+    assert (pos[1] + pos[2]) / 2 == pytest.approx((6.538 + 6.540) / 2)            # around their mean
+    pos = figures.spread([1.0, 1.1, 1.2, 3.0], 0.4)
+    assert all(b - a >= 0.4 - 1e-9 for a, b in zip(sorted(pos), sorted(pos)[1:], strict=False))
+
+
+def test_plot_draws_the_summary_values_and_is_deterministic(tmp_path):
     pytest.importorskip("matplotlib")
     t = figures.mean_prediction_table((ROOT / figures.SUMMARY).read_text(encoding="utf-8"))
-    a = figures.plot(t, tmp_path / "a.png", "x").read_bytes()
-    b = figures.plot(t, tmp_path / "b.png", "x").read_bytes()
-    assert a[:8] == b"\x89PNG\r\n\x1a\n" and a == b
+    pa, drawn = figures.plot(t, tmp_path / "a.png", "x")
+    pb, _ = figures.plot(t, tmp_path / "b.png", "x")
+    assert pa.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" and pa.read_bytes() == pb.read_bytes()
+    assert drawn["d6"] == [r["d6"][0] for r in t["rows"]] and drawn["control"] == [r["control"] for r in t["rows"]]
+
+
+def test_paper_pdf_is_single_column_size_and_deterministic(tmp_path):
+    pytest.importorskip("matplotlib")
+    t = figures.mean_prediction_table((ROOT / figures.SUMMARY).read_text(encoding="utf-8"))
+    a = figures.plot(t, tmp_path / "a.pdf", "x", paper=True)[0].read_bytes()
+    b = figures.plot(t, tmp_path / "b.pdf", "x", paper=True)[0].read_bytes()
+    assert a.startswith(b"%PDF") and a == b
+    assert b"/MediaBox [ 0 0 468 244.8 ]" in a                                    # 6.5 x 3.4 in
+    assert figures.PAPER_SIZE[0] == 6.5
