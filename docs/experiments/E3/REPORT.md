@@ -1,5 +1,38 @@
 # Isomer E3 — What the learned heuristic extrapolates, and what it does not
 
+## E3 final status (2026-11-18)
+
+This section was added after the report. The report below (2026-11-10) is unchanged. Every summary file is in `docs/experiments/E3/`.
+
+| # | result | prediction committed | result committed | summary file |
+|---|---|---|---|---|
+| 1 | Saturation | none (exploratory) | `87ff411` | `seeds_summary.md` |
+| 2 | d6 intervention | `4821ed0`, amended `583e232` before the states were built | `6ba5b23` (seed 0), `25450f4` (seeds 0-2) | `d6_summary.md`, `d6_family_summary.md`, `overlap_summary.md` |
+| 3 | Size-matched control | `a2815ff` | `1db28a7` (1 d6 seed), `25450f4` (3 d6 seeds) | `d6_matched_summary.md`, `d6_family_summary.md` |
+| 4 | Fresh confirmation | `40ebab3` (rules), `9a345d6` (sample, before any model ran) | `b68f2dc` | `fresh_prediction.md`, `fresh_summary.md` |
+
+1. **Saturation of the baseline is not a seed effect.** h-v1 and two reseeded runs (h-v1-s1, h-v1-s2) all show the saturation and the margin collapse of section 1. Their mean prediction at true distance 7-8 is 4.69-4.76, below the training maximum of 5. What varies between seeds is the level: top-1 is 0.645-0.800 and 65-80% of problems are solved at 1,000 expansions. The verdict thresholds were chosen after seeing the results; result 4 tests the saturation again under a rule fixed in advance.
+2. **Training on deeper problems removes the saturation (d6).** The d6 models have the same configuration, with training problems up to distance 6. They meet every pre-registered quantity of `d6_prediction.md`, all three seeds:
+   - mean prediction 6.19-6.29 at k = 7 and 6.58-6.65 at k = 8;
+   - drop to the optimal child 0.57-0.58 at k = 7.
+
+   All-children top-1 rises to 0.948-0.964 and 298/300 problems are solved at 1,000 expansions (seed 0). Exact train/test (state, goal) overlap is 5 of 1,935 scored states, so it does not explain the gain.
+3. **The d6 gain comes from depth coverage, not data volume.** The control h-d6m-s0 has as many training problems and optimizer steps as the baseline, drawn from the d6 data. It is "depth" on all five rules of `d6_matched_prediction.md`. Two caveats:
+   - It lies just below every d6 seed on four of the five quantities (E2 sample): top-1 is 0.940 against 0.948-0.964.
+   - It is one seed and one subset. The pre-registration says such a result is to be reported this way.
+4. **Fresh confirmation: H1-H4 all supported** on 300 newly generated problems, with the decision rules committed before the sample existed. The sample uses the v2 eval-pool generator with seed 1; its ids are disjoint from v2 and d6, with the E2 per-distance counts. 1,939 states are scored; 26 unknown states are excluded.
+   - H1, saturation: baseline mean prediction is 4.651-4.724 at k = 7-8, and d6 is 6.025-6.565.
+   - H2, move choice: d6 top-1 is 0.949-0.971, against 0.803 for the best baseline seed.
+   - H3, search: d6 solves 261-281 problems against 171 at 30 expansions, and 290-294 against 234 at 1,000. All 18 Holm-adjusted McNemar tests give p < 1e-15.
+   - H4, control: "depth" on all five rules. As on the E2 sample, the control is below every d6 seed on some quantities (three of five here). For example, its top-1 is 0.936 against 0.949-0.971.
+
+**Still open.**
+- **No objective or encoding intervention was run.** These are the interventional part of the original hypothesis in section 1.
+- **The symbol-token findings (section 1, point 4) were not retested.**
+- **Limited generality:** all results come from one generator, two theories and one action space.
+
+---
+
 Date: 2026-11-10. Companion data: `ISOMER_E3_RESULTS.json` (every number below is taken from it or from the repository's committed E2 documents; experiment ids in brackets refer to its `experiments[]`).
 
 Labels used throughout: **Established** (published in the repository, not rerun), **Reproduced** (rerun here, matches), **Newly measured** (E3), **Proposed** (not run), **Not verified**.
