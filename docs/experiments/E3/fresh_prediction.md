@@ -103,3 +103,24 @@ bfs-bidir and bestfirst-symbol_bag-w1 on the same problems, and the exact
 - The H1 and H4 thresholds were chosen with E2-sample results in view; what is
   new is the problems, not the rules.
 - Three seeds per group; the control is one seed.
+
+## Sample drawn (2026-11-18), before any model was run on it
+
+`scripts/e3_build_fresh.py` built `data/isobench-fresh` (datasheet
+`data/isobench-fresh/datasheet.json`). No rule above was changed.
+
+- 2,400 problems generated (1,200 per theory); 155 walks replaced at
+  generation because their id was in v2 or d6 (bool 33, group 122).
+- Labelled: 1,617 solved, 783 stopped at the 20,000-expansion budget (no exact
+  distance); 376 had distance <= 4. Kept in `test_depth_fresh`: 1,241
+  (bool 494, group 747). By distance: 5: 246, 6: 422, 7: 248, 8: 209, 9: 90,
+  10: 24, 11: 2.
+- Collisions with every split of `data/isobench-v2` and `data/isobench-v2-d6`:
+  0 in each of the 10 files (checked by the build and again separately).
+- Sample: `docs/experiments/E3/ids-test_depth_fresh.txt`, 300 problems,
+  distance 5: 70, 6: 97, 7: 58, 8: 52, 9: 19, 10: 4 (bool 112, group 188).
+  It is stratified by distance only, as the E2 sample was.
+- sha256 of `data/isobench-fresh/test_depth_fresh.jsonl`:
+  `97250035a17b5a01ccbce1af2848e2e1dff6b172834e5e46632a5fb895faf274`
+- sha256 of `docs/experiments/E3/ids-test_depth_fresh.txt`:
+  `fee19a927ee22986ecd8109fe1ad9cbb8e966dfa4d3d9b159f01340bf58ce66a`
