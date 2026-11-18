@@ -42,7 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     except seeds.SeedsError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(f"wrote {path.relative_to(ROOT).as_posix()}")
+    shown = path.relative_to(ROOT) if path.resolve().is_relative_to(ROOT) else path    # --out may be outside the repo
+    print(f"wrote {shown.as_posix()}")
     return 0
 
 
