@@ -267,24 +267,24 @@ Measured times come from the files each step writes:
 - training: per-epoch train + validation seconds in `metrics.jsonl`, without model and data loading;
 - the states build: `stats.json`;
 - search: the elapsed time `bench` prints at 100%;
-- scoring: `seconds` in `*.score.json`.
-
-"Not recorded" means the step printed its time only to the console.
+- scoring: `seconds` in `*.score.json`;
+- dataset builds and child labelling: the times these steps printed to the console (they store no timings);
+- the size-matched subset: a later rebuild.
 
 | # | step | command | measured time |
 |---:|---|---|---:|
-| 1 | d6 dataset (train pool relabelled to distance 6) | `python scripts/e3_build_d6.py` | not recorded |
+| 1 | d6 dataset (train pool relabelled to distance 6) | `python scripts/e3_build_d6.py` | 367 s (generation 75 s, train labelling 292 s; 15 workers) |
 | 2 | d6 training states | `python -m isomer states --data data/isobench-v2-d6 --out data/states-v2-d6 --offpath 6 --budget 3000` | 14,075 s |
 | 3 | baseline seeds h-v1-s1, h-v1-s2 | `python scripts/train_seeds.py` | 9,166 s, 9,056 s |
 | 4 | d6 seeds h-d6-s0, s1, s2 | `python scripts/train_seeds.py --seeds 0,1,2 --states data/states-v2-d6 --prefix h-d6-s` | 13,966 s, 13,803 s, 13,751 s |
-| 5 | size-matched subset of the d6 states | `python scripts/e3_build_matched.py` | not recorded |
+| 5 | size-matched subset of the d6 states | `python scripts/e3_build_matched.py` | 68 s (rebuilt to a scratch directory; byte-identical output) |
 | 6 | control h-d6m-s0 | `python scripts/train_seeds.py --seeds 0 --states data/states-v2-d6-matched --prefix h-d6m-s` | 11,242 s |
-| 7 | label every child on the E2 samples (test_id, test_depth) | `python scripts/e3_label.py` | not recorded |
+| 7 | label every child on the E2 samples (test_id, test_depth) | `python scripts/e3_label.py --workers 4` | 0.6 min (test_id), 67.0 min (test_depth) |
 | 8 | score the seven models | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0` | 16.8–37.2 s (test_depth), 5.1–11.2 s (test_id) per model |
 | 9 | neural-w1 search, E2 test_depth sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0` | 637–1,292 s per baseline seed; 57–221 s per d6 seed; 93 s control |
 | 10 | seed, d6, control summaries | `python scripts/e3_seeds_summary.py` and `python scripts/e3_seeds_summary.py --family --d6 h-d6-s0,h-d6-s1,h-d6-s2 --matched h-d6m-s0` | about 2 s each |
-| 11 | fresh pool and its 300-problem sample | `python scripts/e3_build_fresh.py` | not recorded |
-| 12 | label every child on the fresh sample | `python scripts/e3_label.py --splits test_depth_fresh --data data/isobench-fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh --workers 5` | not recorded |
+| 11 | fresh pool and its 300-problem sample | `python scripts/e3_build_fresh.py` | 60.7 min (all cores but one) |
+| 12 | label every child on the fresh sample | `python scripts/e3_label.py --splits test_depth_fresh --data data/isobench-fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh --workers 5` | 46.8 min |
 | 13 | score on the fresh sample | `python scripts/e3_score_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --splits test_depth_fresh --e3 runs/e3-fresh` | 16.7–17.4 s per model |
 | 14 | search on the fresh sample | `python scripts/e3_bench_seeds.py --models h-v1,h-v1-s1,h-v1-s2,h-d6-s0,h-d6-s1,h-d6-s2,h-d6m-s0 --data data/isobench-fresh --split test_depth_fresh --ids docs/experiments/E3/ids-test_depth_fresh.txt --out runs/e3-fresh/bench-seeds --baselines bfs-bidir,bestfirst-symbol_bag-w1` | 621–1,207 s per baseline seed; 70–106 s per d6 seed; 146 s control; 247 s bfs-bidir and symbol_bag |
 | 15 | fresh summary (H1–H4) | `python scripts/e3_fresh_summary.py` | about 27 s |
