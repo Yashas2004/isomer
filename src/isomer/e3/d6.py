@@ -1,5 +1,8 @@
 """IsoBench v2-d6: v2 with train problems of exact distance up to 6 instead of 4.
 
+``build_d6(..., max_dist=5)`` gives v2-d5, the same construction with a cap of 5 (E3, ceiling vs
+training range); the default is unchanged. Everything below applies to both.
+
 Purpose (E3): every seed of the h-v1 configuration saturates just below 5, the
 largest distance of a training state. Training on deeper problems tests whether
 the training range causes that.
@@ -108,21 +111,29 @@ def check_eval(v2: Path, ids_dir: Path) -> dict:
     return out
 
 
-def check_leakage(splits: dict[str, list[dict]], v2: Path) -> dict:
+def check_max_dist(max_dist: int) -> None:
+    """The variant must extend v2's train range, so its cap must exceed v2's ``train_max_dist``."""
+    floor = BuildConfig().train_max_dist
+    if max_dist <= floor:
+        raise D6Error(f"--max-dist {max_dist} must exceed v2's train_max_dist ({floor})")
+
+
+def check_leakage(splits: dict[str, list[dict]], v2: Path, tag: str = "d6") -> dict:
+    """``tag`` names the variant (d6, d5) in the report; the checks do not depend on it."""
     train = {r["id"] for r in splits["train"]}
     test_id = {r["id"] for r in splits["test_id"]}
     v2_ids = {name: _ids((v2 / f"{name}.jsonl").read_bytes()) for name in (*TRAIN_SPLITS, *EVAL_SPLITS)}
-    overlaps = {"d6 test_id": len(train & test_id), "v2 test_id": len(train & v2_ids["test_id"]),
+    overlaps = {f"{tag} test_id": len(train & test_id), "v2 test_id": len(train & v2_ids["test_id"]),
                 **{name: len(train & v2_ids[name]) for name in EVAL_SPLITS}}
     bad = {k: n for k, n in overlaps.items() if n}
     if bad:
-        raise D6Error(f"leakage: d6 train shares ids with {bad}")
+        raise D6Error(f"leakage: {tag} train shares ids with {bad}")
     if not v2_ids["train"] <= train:
-        raise D6Error(f"{len(v2_ids['train'] - train)} v2 train problems are missing from d6 train")
+        raise D6Error(f"{len(v2_ids['train'] - train)} v2 train problems are missing from {tag} train")
     if not v2_ids["test_id"] <= test_id:
-        raise D6Error(f"{len(v2_ids['test_id'] - test_id)} v2 test_id problems are missing from d6 test_id")
-    return {"train_overlap_with": overlaps, "v2_train_subset_of_d6_train": True,
-            "v2_test_id_subset_of_d6_test_id": True,
+        raise D6Error(f"{len(v2_ids['test_id'] - test_id)} v2 test_id problems are missing from {tag} test_id")
+    return {"train_overlap_with": overlaps, f"v2_train_subset_of_{tag}_train": True,
+            f"v2_test_id_subset_of_{tag}_test_id": True,
             "train_added": len(train - v2_ids["train"]), "test_id_added": len(test_id - v2_ids["test_id"])}
 
 
@@ -147,27 +158,32 @@ def label_train_pool(workers: int, progress: bool = True) -> list[dict]:
     return records
 
 
-def build_d6(records: list[dict], v2: str | Path, out: str | Path, ids_dir: str | Path) -> dict:
-    """Check, then write the variant from relabelled train-pool ``records``. Returns the datasheet."""
+def build_d6(records: list[dict], v2: str | Path, out: str | Path, ids_dir: str | Path,
+             max_dist: int = TRAIN_MAX_DIST) -> dict:
+    """Check, then write the variant from relabelled train-pool ``records``. Returns the datasheet.
+    ``max_dist`` is the largest exact distance of a train problem: 6 gives v2-d6, 5 gives v2-d5."""
+    check_max_dist(max_dist)
     v2, out, ids_dir = Path(v2), Path(out), Path(ids_dir)
+    tag = f"d{max_dist}"
     if out.exists() and any(out.iterdir()):
         raise D6Error(f"{out} already exists and is not empty")
     if out.resolve() == v2.resolve():
         raise D6Error("refusing to write into the v2 directory")
-    splits, dropped = split_train_pool(records, TRAIN_MAX_DIST)
+    splits, dropped = split_train_pool(records, max_dist)
     checks = {"replay_of_v2_train_pool": check_replay(records, v2),
               "eval_splits_match_e2_id_files": check_eval(v2, ids_dir),
-              "leakage": check_leakage(splits, v2)}
+              "leakage": check_leakage(splits, v2, tag)}
 
     files = {name: serialise(splits[name]) for name in TRAIN_SPLITS}
     files.update({name: (v2 / f"{name}.jsonl").read_bytes() for name in EVAL_SPLITS})
     parsed = {name: [json.loads(line) for line in data.decode("utf-8").splitlines() if line.strip()]
               for name, data in files.items()}
     v2_sheet = json.loads((v2 / "datasheet.json").read_text(encoding="utf-8"))
-    cfg = replace(BuildConfig(), train_max_dist=TRAIN_MAX_DIST, out=out.as_posix())
+    cfg = replace(BuildConfig(), train_max_dist=max_dist, out=out.as_posix())
+    added = "5" if max_dist == 5 else f"5-{max_dist}"      # the distances this variant adds to v2's range
     sheet = {
         "format": FORMAT_VERSION,
-        "variant": "v2-d6",
+        "variant": f"v2-{tag}",
         "config": {k: list(v) if isinstance(v, tuple) else v for k, v in asdict(cfg).items() if k != "workers"},
         "label_budget": v2_sheet["label_budget"],       # read by `isomer bench` for its circularity guard
         "counts": {k: len(v) for k, v in parsed.items()},
@@ -181,10 +197,10 @@ def build_d6(records: list[dict], v2: str | Path, out: str | Path, ids_dir: str 
                          "relabelled": "train pool (train, test_id), same generation seeds and labeller as v2"},
         "checks": checks,
         "notes": [
-            (f"IsoBench v2 with train_max_dist = {TRAIN_MAX_DIST} applied to the train pool only. test_depth, "
+            (f"IsoBench v2 with train_max_dist = {max_dist} applied to the train pool only. test_depth, "
              "test_deep and test_theory are byte-for-byte the v2 files: in a full build train_max_dist would "
-             "also remove the distance 5-6 problems from test_depth."),
-            ("test_id is a superset of v2's test_id (it gains held-out problems of distance 5-6). The E2 "
+             f"also remove the distance {added} problems from test_depth."),
+            (f"test_id is a superset of v2's test_id (it gains held-out problems of distance {added}). The E2 "
              "samples in docs/experiments/E2 remain valid and held out for models trained on this variant."),
             "all other properties are those of v2; see data/isobench-v2/datasheet.json and ADR-004.",
         ],

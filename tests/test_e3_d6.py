@@ -100,6 +100,20 @@ def test_build_writes_the_variant_and_records_the_checks(v2, tmp_path):
         d6.build_d6(POOL, root, out, ids)
 
 
+def test_max_dist_5_keeps_only_distances_up_to_5(v2, tmp_path):
+    root, ids = v2
+    sheet = d6.build_d6(POOL, root, tmp_path / "d5", ids, max_dist=5)
+    assert sheet["variant"] == "v2-d5" and sheet["config"]["train_max_dist"] == 5
+    assert sheet["counts"] == {"train": 3, "test_id": 1, "test_depth": 2, "test_deep": 1, "test_theory": 1}
+    assert sheet["dropped"] == {"train (dist unknown or > train_max_dist)": 4}     # distances 6, 6, 7 and unknown
+    for name in d6.TRAIN_SPLITS:
+        lines = (tmp_path / "d5" / f"{name}.jsonl").read_text(encoding="utf-8").splitlines()
+        assert max(json.loads(x)["dist"] for x in lines) <= 5
+    assert "d5 test_id" in sheet["checks"]["leakage"]["train_overlap_with"]
+    with pytest.raises(d6.D6Error, match="must exceed"):
+        d6.build_d6(POOL, root, tmp_path / "d4", ids, max_dist=4)
+
+
 def test_same_pool_gives_the_same_bytes(v2, tmp_path):
     root, ids = v2
     d6.build_d6(POOL, root, tmp_path / "a", ids)
