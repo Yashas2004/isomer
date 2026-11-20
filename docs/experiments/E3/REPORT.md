@@ -1,6 +1,6 @@
 # Isomer E3 — What the learned heuristic extrapolates, and what it does not
 
-## E3 final status (2026-11-18)
+## E3 final status (2026-11-18; result 5 added 2026-11-20)
 
 This section was added after the report. The report below (2026-11-10) is unchanged. Every summary file is in `docs/experiments/E3/`.
 
@@ -10,6 +10,7 @@ This section was added after the report. The report below (2026-11-10) is unchan
 | 2 | d6 intervention | `4821ed0`, amended `583e232` before the states were built | `6ba5b23` (seed 0), `25450f4` (seeds 0-2) | `d6_summary.md`, `d6_family_summary.md`, `overlap_summary.md` |
 | 3 | Size-matched control | `a2815ff` | `1db28a7` (1 d6 seed), `25450f4` (3 d6 seeds) | `d6_matched_summary.md`, `d6_family_summary.md` |
 | 4 | Fresh confirmation | `40ebab3` (rules), `9a345d6` (sample, before any model ran) | `b68f2dc` | `fresh_prediction.md`, `fresh_summary.md` |
+| 5 | Training range d5 (does the ceiling track the range?) | `cef3f69` | `3c6a6b5` | `d5_prediction.md`, `d5_summary.md` |
 
 1. **Saturation of the baseline is not a seed effect.** h-v1 and two reseeded runs (h-v1-s1, h-v1-s2) all show the saturation and the margin collapse of section 1. Their mean prediction at true distance 7-8 is 4.69-4.76, below the training maximum of 5. What varies between seeds is the level: top-1 is 0.645-0.800 and 65-80% of problems are solved at 1,000 expansions. The verdict thresholds were chosen after seeing the results; result 4 tests the saturation again under a rule fixed in advance.
 2. **Training on deeper problems removes the saturation (d6).** The d6 models have the same configuration, with training problems up to distance 6. They meet every pre-registered quantity of `d6_prediction.md`, all three seeds:
@@ -25,6 +26,7 @@ This section was added after the report. The report below (2026-11-10) is unchan
    - H2, move choice: d6 top-1 is 0.949-0.971, against 0.803 for the best baseline seed.
    - H3, search: d6 solves 261-281 problems against 171 at 30 expansions, and 290-294 against 234 at 1,000. All 18 Holm-adjusted McNemar tests give p < 1e-15.
    - H4, control: "depth" on all five rules. As on the E2 sample, the control is below every d6 seed on some quantities (three of five here). For example, its top-1 is 0.936 against 0.949-0.971.
+5. **Training range d5: not supported as predicted, but the ceiling follows the range** (one seed, h-d5-s0, trained on problems up to distance 5; prediction `cef3f69`, committed before any d5 state existed). H-d5c fails: all-children top-1 is 0.793 against the required > 0.800. That value lies inside the baseline seed range (0.645-0.800), and the baseline seeds alone span 0.155. H-d5a and H-d5b hold: the mean prediction is 5.493 at k = 7 and 5.683 at k = 8, between the baseline and d6, and its highest mean prediction at k >= 6 is 5.794. The plateaus are 4.703-4.769 (baseline, problems up to 4), 5.794 (d5, up to 5) and 6.671-6.841 (d6, up to 6), so the ceiling rises about one step per step of training range. This is one seed between two three-seed ranges.
 
 **Still open.**
 - **No objective or encoding intervention was run.** These are the interventional part of the original hypothesis in section 1.

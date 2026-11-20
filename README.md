@@ -90,7 +90,7 @@ How the modules connect (the pipeline view is the diagram above):
 
 ### E3: why the heuristic stops at its training range
 
-Four results, each confirmed by a rule fixed in advance. The full account, with commits, is in [docs/experiments/E3/REPORT.md](docs/experiments/E3/REPORT.md) ("E3 final status").
+Four results, each confirmed by a rule fixed in advance, and a fifth (d5, item 5) that was only partly confirmed. The full account, with commits, is in [docs/experiments/E3/REPORT.md](docs/experiments/E3/REPORT.md) ("E3 final status").
 
 1. **Saturation.** The baseline's distance estimate flattens just below the largest training distance, in all three training seeds. On test_depth states at true distance 7–8, its mean prediction is 4.685–4.764, while training states reach distance 5. Its drop to the optimal child shrinks to 0.068–0.139 at distance 7.
 2. **The d6 intervention.** The same configuration trained on problems up to distance 6 (h-d6, three seeds) no longer saturates there. Its mean prediction at distance 7 is 6.186–6.291, and its all-children top-1 is 0.948–0.964 against 0.645–0.800 for the baseline.
@@ -100,6 +100,8 @@ Four results, each confirmed by a rule fixed in advance. The full account, with 
 ![Mean predicted distance vs true distance on the fresh sample: the baseline levels off near 4.7, below its training maximum of 5; the d6 seeds and the control level off near 6.5, below 7](docs/experiments/E3/saturation.png)
 
 *Figure 1.* Mean predicted distance by true distance on the fresh sample. Lines are the mean over seeds and bands span the three seeds. Dashed lines mark each family's training maximum. Drawn by `scripts/e3_figures.py` from [fresh_summary.md](docs/experiments/E3/fresh_summary.md) only. Distance 10 has 1 scored state and is left out.
+
+5. **A third range, d5 (one seed): not supported as predicted.** h-d5-s0, trained on problems up to distance 5, has its highest mean prediction at 5.794, between the baseline (4.703–4.769) and d6 (6.671–6.841), so the ceiling rises about one step per step of training range (H-d5a and H-d5b hold). Its top-1 is 0.793, not above the 0.800 bound (H-d5c fails). Prediction [d5_prediction.md](docs/experiments/E3/d5_prediction.md), commit `cef3f69`; [summary](docs/experiments/E3/d5_summary.md).
 
 On the fresh sample (300 problems, 1,939 scored states; ranges over seeds; solved = kernel-accepted, of 300):
 
